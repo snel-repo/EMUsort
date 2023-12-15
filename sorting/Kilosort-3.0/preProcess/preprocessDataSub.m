@@ -315,7 +315,12 @@ function rez = preprocessDataSub(ops)
         % circularly shift each channel by the appropriate amount
         % plot(data')
         for i = 1:length(channelDelays)
-            data(i, :) = circshift(data(i, :), channelDelays(i));
+            try
+                data(i, :) = circshift(data(i, :), channelDelays(i));
+            catch
+                error('Error in preprocessDataSub.m:  channelDelays is length %d, index i is %d, channelDelays(i) is %d, and size(data) is %d', length(channelDelays), i, channelDelays(i), size(data))
+            end 
+                
         end
         % plot(data' + max(abs(data(:)))) % plot shifted data
         fseek(fidOff, 0, 'bof'); % fseek to start in raw file, to overwrite

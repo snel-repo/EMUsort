@@ -237,7 +237,7 @@ if isa(remove_bad_myo_chans(1), 'logical') || isa(remove_bad_myo_chans, 'char')
         disp(['New channel list is: ' num2str(chanList)])
     end
 elseif isa(remove_bad_myo_chans, 'integer')
-    zero_arr = zeros(1, length(remove_bad_myo_chans));
+    zero_arr = zeros(1, length(chanList));
     zero_arr(remove_bad_myo_chans) = 1;
     remove_bad_myo_chans = logical(zero_arr);
     brokenChan = remove_bad_myo_chans; % overwrite brokenChan with manually provided list

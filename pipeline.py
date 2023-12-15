@@ -729,17 +729,24 @@ if myo_sort:
                             ],
                             check=True,
                         )
-                        # extract waveforms for Phy FeatureView
-                        subprocess.run(
-                            # "phy extract-waveforms params.py",
-                            [
-                                "phy",
-                                "extract-waveforms",
-                                "params.py",
-                            ],
-                            cwd=save_path,
-                            check=True,
-                        )
+                        try:
+                            # extract waveforms for Phy FeatureView, skip if error
+                            subprocess.run(
+                                # "phy extract-waveforms params.py",
+                                [
+                                    "phy",
+                                    "extract-waveforms",
+                                    "params.py",
+                                ],
+                                cwd=save_path,
+                                check=True,
+                            )
+                        except:
+                            print(
+                                "Error running 'phy extract-waveforms params.py', skipping."
+                            )
+                            pass
+
                         # get number of good units and total number of clusters from rez.mat
                         rez = scipy.io.loadmat(f"{save_path}/rez.mat")
                         num_KS_clusters = str(len(rez["good"]))
@@ -774,7 +781,7 @@ if myo_sort:
                             f"_{time_stamp_us}"
                             f"_rec-{recordings_str}"
                             # f"_chans-{goodChans_str}"
-                            # f"_{num_good_units}-good-of-{num_KS_clusters}-total"
+                            f"_{num_good_units}-good-of-{num_KS_clusters}-total"
                             f"_{filename_friendly_params}"
                             # f"_{git_branch}"
                         )

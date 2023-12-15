@@ -33,7 +33,14 @@ function [row, col, mu] = isolated_peaks_multithreshold(S1, ops, ibatch)
 
         % exclude temporal buffers
         % - [nt0] is NOT the temporal buffer param, should be [ntbuff]
-        peaks([1:ntbuff end - ntbuff:end], :) = 0;
+        try
+            peaks([1:ntbuff end - ntbuff:end], :) = 0; % WARNING, this is error sometimes, due to "index must be positive real number or logical" error. Resolve by skipping
+        catch
+            disp('WARNING: peaks([1:ntbuff end - ntbuff:end], :) = 0; in isolated_peaks_multithreshold.m failed.');
+            disp('batch length is' + string(size(S1, 1)));
+            disp('peaks shape is' + string(size(peaks)));
+            disp('WARNING: skipping this batch.');
+        end
 
         [row, col, mu] = find(peaks); % find the non-zero peaks, and take their amplitudes
         mu =- mu; % invert the sign of the amplitudes

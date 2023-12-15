@@ -136,6 +136,15 @@ function rez1 = final_clustering(rez, tF, st3)
         rez.U(:, t, :) = rez.U(:, t, :) / rez.mu(t);
     end
 
+    % plot dWU for each cluster
+    % for t = 1:n0
+    %     figure(110101)
+    %     plot(dWU)
+    %     title(sprintf('Cluster %d', t))
+    %     pause
+    % end
+
+
     %%
     amps = sq(sum(sum(tF .^ 2, 2), 3)) .^ .5;
 
