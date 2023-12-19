@@ -16,7 +16,7 @@ from ruamel.yaml import YAML
 
 from pipeline_utils import create_config, extract_LFP, extract_sync, find
 from registration.registration import registration as registration_function
-from sorting.Kilosort_gridsearch_config import get_KS_params_grid
+from sorting.EMUsort_gridsearch_config import get_params_grid
 
 # calculate time taken to run each pipeline call
 start_time = datetime.datetime.now()
@@ -644,7 +644,7 @@ if myo_sort:
         # check if user wants to do grid search of KS params
         if config["Sorting"]["do_KS_param_gridsearch"] == 1:
             iParams = list(
-                get_KS_params_grid()
+                get_params_grid()
             )  # get iterator of all possible param combinations
         else:
             # just pass an empty string to run once with chosen params
