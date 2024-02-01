@@ -16,7 +16,7 @@ from ruamel.yaml import YAML
 
 from pipeline_utils import create_config, extract_LFP, extract_sync, find
 from registration.registration import registration as registration_function
-from sorting.Kilosort_gridsearch_config import get_KS_params_grid
+from sorting.EMUsort_gridsearch_config import get_params_grid
 
 # calculate time taken to run each pipeline call
 start_time = datetime.datetime.now()
@@ -644,7 +644,7 @@ if myo_sort:
         # check if user wants to do grid search of KS params
         if config["Sorting"]["do_KS_param_gridsearch"] == 1:
             iParams = list(
-                get_KS_params_grid()
+                get_params_grid()
             )  # get iterator of all possible param combinations
         else:
             # just pass an empty string to run once with chosen params
@@ -704,7 +704,7 @@ if myo_sort:
                             # this is a comma-separated string of key-value pairs
                             passable_params = ",".join(str(p) for p in flattened_params)
                         elif type(these_params) == str:
-                            print(f"Using KS params from Kilosort_run_myo_3.m")
+                            print(f"Using KS params from Kilosort_run_myo_3_czuba.m")
                             passable_params = (
                                 these_params  # this is a string: 'default'
                             )
@@ -729,17 +729,24 @@ if myo_sort:
                             ],
                             check=True,
                         )
-                        # extract waveforms for Phy FeatureView
-                        subprocess.run(
-                            # "phy extract-waveforms params.py",
-                            [
-                                "phy",
-                                "extract-waveforms",
-                                "params.py",
-                            ],
-                            cwd=save_path,
-                            check=True,
-                        )
+                        try:
+                            # extract waveforms for Phy FeatureView, skip if error
+                            subprocess.run(
+                                # "phy extract-waveforms params.py",
+                                [
+                                    "phy",
+                                    "extract-waveforms",
+                                    "params.py",
+                                ],
+                                cwd=save_path,
+                                check=True,
+                            )
+                        except:
+                            print(
+                                "Error running 'phy extract-waveforms params.py', skipping."
+                            )
+                            pass
+
                         # get number of good units and total number of clusters from rez.mat
                         rez = scipy.io.loadmat(f"{save_path}/rez.mat")
                         num_KS_clusters = str(len(rez["good"]))
@@ -774,7 +781,7 @@ if myo_sort:
                             f"_{time_stamp_us}"
                             f"_rec-{recordings_str}"
                             # f"_chans-{goodChans_str}"
-                            # f"_{num_good_units}-good-of-{num_KS_clusters}-total"
+                            f"_{num_good_units}-good-of-{num_KS_clusters}-total"
                             f"_{filename_friendly_params}"
                             # f"_{git_branch}"
                         )

@@ -1,7 +1,7 @@
 script_dir = pwd; % get directory where repo exists
 load(fullfile(script_dir, '/tmp/config.mat'))
 
-% for use with monopolar
+% for use with monopolar (% should remove this eventually)
 channelRemap = [23:-1:8 24:31 0:7] + 1;
 % for use with bipolar
 % channelLabelsBipolar = [25, 26; 27, 28; 29, 30; 31, 32; ...
@@ -61,7 +61,7 @@ else
     clear tempdata
 end
 
-if length(dataChan) == 32
+if length(dataChan) == 32 % should remove this eventually
     data = data(:, channelRemap);
 end
 if ~isempty(analogData)    
@@ -78,9 +78,7 @@ disp(['Total recording time: ' num2str(size(data, 1) / myo_data_sampling_rate / 
 
 clf
 S = zeros(size(data, 2), 3);
-bipolarThresh = 90;
-unipolarThresh = 120;
-lowThresh = 0.1;
+
 % bipolar = length(chanList) == 16;
 % when q is 1, we will compute count the number of spikes in the channel and compare to a threshold
 % when q is 2, we will compute the std of the low freq noise in the channel
@@ -107,7 +105,7 @@ for q = 1:4
         % standardize this data channel before filtering, but make sure not to divide by zero
         chan_std = std(single(data(tRange, i)));
         if chan_std == 0
-            data_norm(:, i) = single(data(tRange, i));
+            data_norm(:, i) = single(data(tRange, i)); % this channel is flat, so don't normalize
         else
             data_norm(:, i) = single(data(tRange, i)) ./ chan_std;
         end
@@ -187,7 +185,6 @@ for q = 1:4
         disp("SNRs: " + num2str(SNR))
         disp("Mean +/- Std. SNR: " + num2str(mean_SNR) + " +/- " + num2str(std_SNR))
         disp("Median SNR: " + num2str(median_SNR))
-        disp("Channels with rejectable SNRs: " + num2str(SNR_reject_chans))
     end
 
     % subplot(1, 4, q)
@@ -239,6 +236,9 @@ if isa(remove_bad_myo_chans(1), 'logical') || isa(remove_bad_myo_chans, 'char')
         disp(['New channel list is: ' num2str(chanList)])
     end
 elseif isa(remove_bad_myo_chans, 'integer')
+    zero_arr = zeros(1, length(chanList));
+    zero_arr(remove_bad_myo_chans) = 1;
+    remove_bad_myo_chans = logical(zero_arr);
     brokenChan = remove_bad_myo_chans; % overwrite brokenChan with manually provided list
     data(:, brokenChan) = [];
     chanList(brokenChan) = [];
@@ -264,7 +264,7 @@ if ~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false
     % else
     numDummy = max(0, num_KS_components - size(data, 2)); % make sure it's not negative
     dummyData = zeros(size(data, 1), numDummy, 'int16');
-    data = [data dummyData]; % add dummy channels to make size larger than num_KS_components
+    data = [data dummyData]; % add dummy channels to make size match num_KS_components
     chanMap = 1:size(data, 2);
     chanMap0ind = chanMap - 1;
     connected = true(size(data, 2), 1);
@@ -299,6 +299,7 @@ else
     chanIdxsToFilter = 1:size(data, 2);
 end
 buffer = 128;
+
 % now write the data to binary file in chunks of 5 seconds, but exclude dummy channels
 for t = 1:length(intervals) - 1
     preBuff = buffer; postBuff = buffer;

@@ -26,7 +26,7 @@ ibatch = ibatch:ops.nSkipCov:Nbatch;
 
 % scrappy progress bar in command window
 % allBatches = 1:Nbatch;
-pb = progBar(ibatch, 20);
+% pb = progBar(ibatch, 20);
 
 if getOr(ops, 'useMemMapping',0)
     %% Parallelize raw data loading (needs memmapfile implement for parallel read access)
@@ -133,7 +133,7 @@ else
         
         CC        = CC + (datr' * datr)/NT; % sample covariance
         
-        pb.check(ii) % update progress bar in command window
+        % pb.check(ii) % update progress bar in command window
     end
     CC = CC / ceil((Nbatch-1)/ops.nSkipCov); % normalize by number of batches
     toc

@@ -393,15 +393,25 @@ function [wTEMP, wPCA] = extractTemplatesfromSnippets(rez, nPCs)
             % get the spikes that were chosen for this cluster
             cluster_spikes = spikes(:, wave_choice_left_bounds(iCluster):wave_choice_right_bounds(iCluster));
             % get the correlation matrix for this cluster
-            cluster_CC = corr(cluster_spikes);
-            % get the top 1 percent most correlated spikes to the chosen spikes, must be at least 10 spikes
+            % catch OOM error by subsampling every other spike until it works
             try
-                [~, top_CC_idxs] = maxk(cluster_CC(:, 1), max(ceil(size(cluster_CC, 1) * 0.01), 10));
+                cluster_CC = corr(cluster_spikes);
+            
             catch
-                % if there are less than 10 spikes in the cluster, just take the top 1 percent
-                [~, top_CC_idxs] = maxk(cluster_CC(:, 1), ceil(size(cluster_CC, 1) * 0.01));
-                
+                disp('Out of memory error, subsampling spikes by 2 for correlation calculation and trying again. Try increasing ops.nskip')
+                try
+                    cluster_CC = corr(cluster_spikes(:, 1:2:end));
+                catch
+                    disp('Out of memory error again, subsampling spikes by 8 for correlation calculation. Try increasing ops.nskip')
+                    try
+                        cluster_CC = corr(cluster_spikes(:, 1:8:end));
+                    catch
+                        error('Out of memory error again during correlation calculation, try increasing ops.nskip')
+                    end
+                end
             end
+            % get the top 1 percent most correlated spikes to the chosen spikes, ceil to avoid 0
+            [~, top_CC_idxs] = maxk(cluster_CC(:, 1), ceil(size(cluster_CC, 1) * 0.01));
 
             % get the top 10 percent most correlated spikes
             top_CC_spikes = cluster_spikes(:, top_CC_idxs);
