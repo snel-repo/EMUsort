@@ -1,4 +1,4 @@
-# PixelProcessingPipeline
+# EMUsort
 This toolbox easily and automatically processes Neuropixels and Myomatrix data recorded during experiments.
 
 This toolbox will:
@@ -41,7 +41,7 @@ These installation instructions were tested on the Computational Brain Science G
 
 Clone a copy of the repository on your local machine (for example, in the home directory)
 
-    git clone https://github.com/JonathanAMichaels/PixelProcessingPipeline.git
+    git clone https://github.com/snel-repo/EMUsort.git
     
 After cloning, you can either configure a virtualenv, conda, or micromamba environment to run the pipeline
 
@@ -81,12 +81,12 @@ Open matlab and confirm that all mex files compile by running
     WARNING: make sure to activate the pipeline environment before running these commands
 
     matlab -nodesktop
-    cd PixelProcessingPipeline/sorting/Kilosort-3.0/CUDA/
+    cd EMUsort/sorting/Kilosort-3.0/CUDA/
     mexGPUall
 
 (Optional) Compile codes necessary for drift estimation and install supplementary packages
 
-    cd PixelProcessingPipeline/registration/spikes_localization_registration
+    cd EMUsort/registration/spikes_localization_registration
     python3 setup.py build_ext --inplace
     pip install -e .
 
