@@ -60,14 +60,16 @@ function rez = preprocessDataSub(ops)
 
     bytes = get_file_size(ops.fbinary); % size in bytes of raw binary
     nTimepoints = floor(bytes / NchanTOT / 2); % number of total timepoints
-    ops.tstart = ceil(ops.trange(1) * ops.fs); % starting timepoint for processing data segment
-    ops.tend = min(nTimepoints, ceil(ops.trange(2) * ops.fs)); % ending timepoint
+    % ops.tstart = ceil(ops.trange(1) * ops.fs); % starting timepoint for processing data segment
+    % ops.tend = min(nTimepoints, ceil(ops.trange(2) * ops.fs)); % ending timepoint
+    ops.tstart = 0; % setting zero as the data is already sliced in myomatrix_binary.m
+    ops.tend = nTimepoints; % setting end timepoint as length of file because data is sliced in myomatrix_binary.m
     ops.sampsToRead = ops.tend - ops.tstart; % total number of samples to read
     ops.twind = ops.tstart * NchanTOT * 2; % skip this many bytes at the start
 
     Nbatch = ceil(ops.sampsToRead / NT); % number of data batches
     ops.Nbatch = Nbatch;
-
+    
     % ------------------------------------------------------------------------------------
     % Preprocessed file size & samples
     % ------------------------------------------------------------------------------------
@@ -75,13 +77,14 @@ function rez = preprocessDataSub(ops)
 
     % still want processed batches to line up with tstart & tend in same way they do when tstart==0
     % - sample based (not byte offset)
+    % procBatchStarts = ops.tstart + (0:NT:NT * (ops.Nbatch - 1)); % baseline batches of interest
     procBatchStarts = ops.tstart + (0:NT:NT * (ops.Nbatch - 1)); % baseline batches of interest
-    if ops.tstart > 0
-        % append batches reaching back to start of file such that batch indices within tstart:tend are maintained
-        % - as consequence, first batch may start with a negative value & contain <NT samples of **real data**
-        % - thus, writing of that first batch will have to skip over any prepadded samples w/in typical non-buffer block of NT samples
-        procBatchStarts = [fliplr((ops.tstart - NT):-NT:(-NT + 1)), procBatchStarts];
-    end
+    % if ops.tstart > 0
+    %     % append batches reaching back to start of file such that batch indices within tstart:tend are maintained
+    %     % - as consequence, first batch may start with a negative value & contain <NT samples of **real data**
+    %     % - thus, writing of that first batch will have to skip over any prepadded samples w/in typical non-buffer block of NT samples
+    %     procBatchStarts = [fliplr((ops.tstart - NT):-NT:(-NT + 1)), procBatchStarts];
+    % end
     % - if all done correctly, get_batch.m should handle loading this appropriately by offsetting batch loading by tstart,
     ops.NprocBatch = length(procBatchStarts);
     ops.procBatchStarts = procBatchStarts;

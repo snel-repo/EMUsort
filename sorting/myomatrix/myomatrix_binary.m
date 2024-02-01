@@ -105,7 +105,7 @@ for q = 1:4
         % standardize this data channel before filtering, but make sure not to divide by zero
         chan_std = std(single(data(tRange, i)));
         if chan_std == 0
-            data_norm(:, i) = single(data(tRange, i));
+            data_norm(:, i) = single(data(tRange, i)); % this channel is flat, so don't normalize
         else
             data_norm(:, i) = single(data(tRange, i)) ./ chan_std;
         end
@@ -185,7 +185,6 @@ for q = 1:4
         disp("SNRs: " + num2str(SNR))
         disp("Mean +/- Std. SNR: " + num2str(mean_SNR) + " +/- " + num2str(std_SNR))
         disp("Median SNR: " + num2str(median_SNR))
-        disp("Channels with rejectable SNRs: " + num2str(SNR_reject_chans))
     end
 
     % subplot(1, 4, q)
@@ -300,6 +299,7 @@ else
     chanIdxsToFilter = 1:size(data, 2);
 end
 buffer = 128;
+
 % now write the data to binary file in chunks of 5 seconds, but exclude dummy channels
 for t = 1:length(intervals) - 1
     preBuff = buffer; postBuff = buffer;

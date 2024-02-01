@@ -87,7 +87,7 @@ function rez = Kilosort_run_myo_3_czuba(ops_input_params, worker_id, worker_dir)
     if trange(2) == 0
         ops.trange = [0 Inf];
     else
-        ops.trange = trange;
+        ops.trange = double(trange);
     end
 
     % create parallel pool for all downstream parallel processing

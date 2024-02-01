@@ -704,7 +704,7 @@ if myo_sort:
                             # this is a comma-separated string of key-value pairs
                             passable_params = ",".join(str(p) for p in flattened_params)
                         elif type(these_params) == str:
-                            print(f"Using KS params from Kilosort_run_myo_3.m")
+                            print(f"Using KS params from Kilosort_run_myo_3_czuba.m")
                             passable_params = (
                                 these_params  # this is a string: 'default'
                             )

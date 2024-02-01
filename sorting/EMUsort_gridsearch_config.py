@@ -14,15 +14,31 @@ from sklearn.model_selection import ParameterGrid
 #         initial templates, ignoring duplicates. (KS default is -6, did not allow multiple values)
 def get_params_grid():
     grid = dict(
+        # Search Schemes:
         ###########################################################################################
-        ## v 8 combinations, standard choice
+        ## v 12 combinations, standard choice
+        # Th=[[10, 4], [7, 3], [5, 2], [2, 1]],
+        # spkTh=[[-6], [-3, -6], [-6, -9]],
+        ## ^
+        ###########################################################################################
+        ## v 8 combinations, less comprehensive search
         # Th=[[10, 4], [7, 3], [5, 2], [2, 1]],
         # spkTh=[[-6], [-3, -6]],
         ## ^
         ###########################################################################################
-        ## v 24 combinations, more comprehensive combination search
-        Th=[[10, 4], [10, 2], [8, 2], [7, 2], [6, 2], [5, 2], [4, 2], [3, 1]],
-        spkTh=[[-6], [-3, -6], [-6, -9]],
+        ## v 16 combinations, more comprehensive Th search
+        # Th=[[10, 4], [10, 2], [8, 2], [7, 2], [6, 2], [5, 2], [4, 2], [3, 1]],
+        # spkTh=[[-6], [-3, -6]],
+        ## ^
+        ###########################################################################################
+        ## v 16 combinations, more comprehensive spkTh search
+        Th=[[10, 4], [7, 3], [5, 2], [2, 1]],
+        spkTh=[[-3], [-6], [-3, -6], [-6, -9]],
+        ## ^
+        ###########################################################################################
+        ## v 24 combinations, most comprehensive search
+        # Th=[[10, 4], [10, 2], [8, 2], [7, 2], [6, 2], [5, 2], [4, 2], [3, 1]],
+        # spkTh=[[-6], [-3, -6], [-6, -9]],
         ## ^
         ###########################################################################################
         ## v 15 combinations, more comprehensive combination of spike thresholds for template init

@@ -65,7 +65,7 @@ function rez = Kilosort_run_myo_3(ops_input_params)
     if trange(2) == 0
         ops.trange = [0 Inf];
     else
-        ops.trange = trange;
+        ops.trange = double(trange);
     end
 
     rez = preprocessDataSub(ops);
