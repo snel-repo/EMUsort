@@ -1,3 +1,5 @@
+<img width="1024px" style="max-width: 50%" alt="black and white emu standing in a dignified fashion" src="images/oksmith-emu.svg"/>
+
 # EMUsort
 This toolbox easily and automatically processes Neuropixels and Myomatrix data recorded during experiments.
 
