@@ -50,3 +50,4 @@ dependencies:
       - ibl-neuropixel==0.4.1
       - ibllib==2.20.0
       - iblutil==1.5.0
+      - spikeinterface
