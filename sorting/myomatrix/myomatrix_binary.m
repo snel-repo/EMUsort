@@ -2,7 +2,7 @@ script_dir = pwd; % get directory where repo exists
 load(fullfile(script_dir, '/tmp/config.mat'))
 
 % for use with monopolar (% should remove this eventually)
-channelRemap = [23:-1:8 24:31 0:7] + 1;
+% channelRemap = [23:-1:8 24:31 0:7] + 1;
 % for use with bipolar
 % channelLabelsBipolar = [25, 26; 27, 28; 29, 30; 31, 32; ...
 %     16, 15; 14, 13; 12, 11; 10, 9; 8, 7; 6, 5; 4, 3; 2, 1; ...
@@ -61,9 +61,9 @@ else
     clear tempdata
 end
 
-if length(dataChan) == 32 % should remove this eventually
-    data = data(:, channelRemap);
-end
+% if length(dataChan) == 32 % should remove this eventually
+%     data = data(:, channelRemap);
+% end
 if ~isempty(analogData)    
     analogData(analogData > 5) = 5;
     sync = logical(round(analogData / max(analogData)));
@@ -252,7 +252,8 @@ save([myo_sorted_dir '/chanList.mat'], 'chanList')
 save([myo_sorted_dir '/brokenChan.mat'], 'brokenChan');
 
 % load and modify channel map variables to remove broken channel elements, if desired
-if ~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false
+disp("WARNING: Overriding chanMap ordering to sequential")
+if (~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false) || size(data,2)<num_KS_components
     load(myo_chan_map_file)
     % if size(data, 2) >= num_KS_components
     %     chanMap(brokenChan) = []; % take off end to save indexing
@@ -272,7 +273,9 @@ if ~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false
     xcoords = zeros(size(data, 2), 1);
     ycoords = (size(data, 2):-1:1)';
     % end
-    disp('Broken channels were just removed from that channel map')
+    if (~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false)
+        disp('Broken channels were just removed from that channel map')
+    end
     save(fullfile(myo_sorted_dir, 'chanMapAdjusted.mat'), 'chanMap', 'connected', 'xcoords', ...
         'ycoords', 'kcoords', 'chanMap0ind', 'fs', 'name', 'numDummy', 'Gaussian_STDs')
 else

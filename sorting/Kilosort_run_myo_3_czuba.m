@@ -6,15 +6,15 @@ function rez = Kilosort_run_myo_3_czuba(ops_input_params, worker_id, worker_dir)
     if num_KS_jobs > 1
         myo_sorted_dir = [myo_sorted_dir num2str(worker_id)];
     else
-        dbstop if error % stop if error, if only one job
+        dbstop if error % stop if error, only if one job, to avoid destroying terminal interactivity
     end
 
     % get and set channel map
-    if ~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false
-        chanMapFile = fullfile(myo_sorted_dir, 'chanMapAdjusted.mat');
-    else
-        chanMapFile = myo_chan_map_file;
-    end
+    % if ~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false
+    chanMapFile = fullfile(myo_sorted_dir, 'chanMapAdjusted.mat');
+    % else
+    %     chanMapFile = myo_chan_map_file;
+    % end
     disp(['Using this channel map: ' chanMapFile])
 
     % set paths
