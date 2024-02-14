@@ -691,7 +691,7 @@ if myo_sort:
                         these_params = next(iParams)
                         if type(these_params) == dict:
                             print(
-                                f"Using these KS params from Kilosort_gridsearch_config.py"
+                                f"Using these KS params from EMUsort_gridsearch_config.py"
                             )
                             print(these_params)
                             param_keys = list(these_params.keys())
