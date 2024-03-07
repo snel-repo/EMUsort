@@ -94,9 +94,9 @@ function rez = Kilosort_run_myo_3_czuba(ops_input_params, worker_id, worker_dir)
     pc = parcluster('local');
     pc.JobStorageLocation = worker_dir;
     % ensure the number of processes across all workers does not exceed number of CPU cores
-    % num_processes = 2*round(feature('numcores')/num_KS_jobs);
-    % poolobj = parpool(pc, num_processes);
-    poolobj = parpool(pc); % let matlab decide how many workers to use
+    num_processes = min(round(feature('numcores')/num_KS_jobs), 32); % max 32 processes
+    poolobj = parpool(pc, num_processes);
+    % poolobj = parpool(pc); % let matlab decide how many workers to use
     % ensure all parallel workers queues are cleared in the event of an error
     cleanup_worker_obj = onCleanup(@() cleanup_worker(poolobj));
 

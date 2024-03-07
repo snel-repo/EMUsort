@@ -15,6 +15,7 @@ from ibllib.ephys.spikes import ks2_to_alf
 from ruamel.yaml import YAML
 
 from pipeline_utils import create_config, extract_LFP, extract_sync, find
+
 # from registration.registration import registration as registration_function
 from sorting.EMUsort_gridsearch_config import get_params_grid
 
@@ -304,6 +305,10 @@ if os.path.isfile("/usr/local/MATLAB/R2021a/bin/matlab"):
     )
 elif os.path.isfile("/srv/software/matlab/R2021b/bin/matlab"):
     matlab_root = "/srv/software/matlab/R2021b/bin/matlab"
+elif Path.home().joinpath("MATLAB/bin/matlab").is_file():
+    matlab_root = Path.home().joinpath("MATLAB/bin/matlab").as_posix()
+elif Path.home().joinpath("matlab/bin/matlab").is_file():
+    matlab_root = Path.home().joinpath("matlab/bin/matlab").as_posix()
 else:
     matlab_path = glob.glob("/usr/local/MATLAB/R*")
     matlab_root = matlab_path[0] + "/bin/matlab"
@@ -394,7 +399,7 @@ if config["concatenate_myo_data"]:
         path_to_add = script_folder + "/sorting/myomatrix/"
         subprocess.run(
             [
-                "matlab",
+                f"{matlab_root}",
                 "-nodesktop",
                 "-nodisplay",
                 "-nosplash",
@@ -512,7 +517,7 @@ if neuro_sort:
         scipy.io.savemat(f"{config['script_dir']}/tmp/config.mat", config_kilosort)
         subprocess.run(
             [
-                "matlab",
+                f"{matlab_root}",
                 "-nodisplay",
                 "-nosplash",
                 "-nodesktop",
@@ -540,7 +545,7 @@ if neuro_post:
         scipy.io.savemat(f"{config['script_dir']}/tmp/config.mat", config_kilosort)
         subprocess.run(
             [
-                "matlab",
+                f"{matlab_root}",
                 "-nodisplay",
                 "-nosplash",
                 "-nodesktop",
@@ -579,9 +584,11 @@ if myo_sort:
         "num_KS_jobs": int(config["num_KS_jobs"]),
         "myomatrix": config["myomatrix"],
         "script_dir": config["script_dir"],
-        "recordings": np.array(config["recordings"], dtype=int)
-        if type(config["recordings"][0]) != str
-        else config["recordings"],
+        "recordings": (
+            np.array(config["recordings"], dtype=int)
+            if type(config["recordings"][0]) != str
+            else config["recordings"]
+        ),
         "myo_data_passband": np.array(config["myo_data_passband"], dtype=float),
         "myo_data_sampling_rate": float(config["myo_data_sampling_rate"]),
         "num_KS_components": np.array(
@@ -626,7 +633,7 @@ if myo_sort:
         shutil.rmtree(config_kilosort["myo_sorted_dir"], ignore_errors=True)
         subprocess.run(
             [
-                "matlab",
+                f"{matlab_root}",
                 "-nodisplay",
                 "-nosplash",
                 "-nodesktop",
@@ -717,7 +724,7 @@ if myo_sort:
                             command_str = f"Kilosort_run_myo_3_czuba('{passable_params}',{worker_id},'{str(worker_dir)}');"
                         subprocess.run(
                             [
-                                "matlab",
+                                f"{matlab_root}",
                                 "-nosplash",
                                 "-nodesktop",
                                 "-r",
@@ -866,7 +873,7 @@ if myo_post:
         # )
         subprocess.run(
             [
-                "matlab",
+                f"{matlab_root}",
                 "-nodisplay",
                 "-nosplash",
                 "-nodesktop",
@@ -933,7 +940,7 @@ if myo_plot:
         arg2 = np.array(arg_as_list).astype(int)
     subprocess.run(
         [
-            "matlab",
+            f"{matlab_root}",
             "-nodesktop",
             "-nosplash",
             "-r",
