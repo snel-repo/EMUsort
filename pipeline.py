@@ -299,19 +299,23 @@ else:
             )
 
 # find MATLAB installation
-if os.path.isfile("/usr/local/MATLAB/R2021a/bin/matlab"):
+if Path("/usr/local/bin/matlab").is_file():
+    matlab_root = "/usr/local/bin/matlab"
+elif os.path.isfile("/usr/local/MATLAB/R2021a/bin/matlab"):
     matlab_root = (
         "/usr/local/MATLAB/R2021a/bin/matlab"  # something else for testing locally
     )
 elif os.path.isfile("/srv/software/matlab/R2021b/bin/matlab"):
     matlab_root = "/srv/software/matlab/R2021b/bin/matlab"
+elif glob.glob("/usr/local/MATLAB/R*") != []:
+    matlab_path = glob.glob("/usr/local/MATLAB/R*")
+    matlab_root = matlab_path[0] + "/bin/matlab"
 elif Path.home().joinpath("MATLAB/bin/matlab").is_file():
     matlab_root = Path.home().joinpath("MATLAB/bin/matlab").as_posix()
 elif Path.home().joinpath("matlab/bin/matlab").is_file():
     matlab_root = Path.home().joinpath("matlab/bin/matlab").as_posix()
 else:
-    matlab_path = glob.glob("/usr/local/MATLAB/R*")
-    matlab_root = matlab_path[0] + "/bin/matlab"
+    raise SystemExit("MATLAB not found")
 
 if config["concatenate_myo_data"]:
     # If concatenate_myo_data is set to true, search myomatrix folder for existing concatenated_data
