@@ -279,6 +279,9 @@ if (~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false) || size(data,2)<nu
     save(fullfile(myo_sorted_dir, 'chanMapAdjusted.mat'), 'chanMap', 'connected', 'xcoords', ...
         'ycoords', 'kcoords', 'chanMap0ind', 'fs', 'name', 'numDummy', 'Gaussian_STDs')
 else
+    if ~exist(myo_chan_map_file, 'file')
+        error('Channel map file does not exist')
+    end
     copyfile(myo_chan_map_file, fullfile(myo_sorted_dir, 'chanMapAdjusted.mat'))
     % add numDummy to chanMapAdjusted.mat
     load(fullfile(myo_sorted_dir, 'chanMapAdjusted.mat'))
