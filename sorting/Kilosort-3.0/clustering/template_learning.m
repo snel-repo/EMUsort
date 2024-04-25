@@ -1,6 +1,6 @@
 function [rez, spike_times_for_kid] = template_learning(rez, tF, st3)
 
-    wPCA = rez.wPCA; % shape is #PC components, #channels
+    wPCA = rez.wPCA; % shape is #nt0, #PC components
     iC = rez.iC;
     ops = rez.ops;
 
@@ -105,7 +105,7 @@ function [rez, spike_times_for_kid] = template_learning(rez, tF, st3)
         hid(tin) = gather(kid + n0);
         n0 = n0 + nmax;
     end
-    Wpca = Wpca(:, :, 1:n0);
+    Wpca = Wpca(:, :, 1:n0); % shape is #PC components, #channels, #clusters
     % Wpca = cat(2, Wpca, zeros(size(Wpca,1), ops.nEig-size(Wpca, 2), size(Wpca, 3), 'single'));
     spike_times_for_kid = spike_times_for_kid(1:n0);
     % plot mean PC coordinates for each cluster for each channel and cluster (not that useful)
@@ -138,7 +138,7 @@ function [rez, spike_times_for_kid] = template_learning(rez, tF, st3)
     end
     for t = 1:n0 % for each cluster
         dWU = wPCA * gpuArray(Wpca(:, :, t)); % multiply PC components by mean PC coordinates for each cluster
-        % shape of dWU is nt0 x Nchan
+        % Shape becomes #nt0 x #channels for each cluster
         %% take absolute value, then sum across channels, then use a 2nd order sgolay to make 1 peak
         %% out of 2 equal peaks, if present, then find a shift to  align max of abs(dWU) to nt0min
         % [~, dWU_shift] = max(smooth(sum(abs(dWU), 2), 30, 'sgolay', 2), [], 1);
@@ -150,9 +150,9 @@ function [rez, spike_times_for_kid] = template_learning(rez, tF, st3)
         [w, s, u] = svdecon(dWU); % compute SVD of that product to deconstruct it into spatial and temporal components
         wsign = -sign(w(ops.nt0min, 1)); % flip sign of waveform if necessary, for consistency
         % vvv save first Ncomps components of W, containing final rotation matrix
-        rez.W(:, t, :) = gather(wsign * w(:, 1:Ncomps));
+        rez.W(:, t, :) = gather(wsign * w(:, 1:Ncomps)); % shape is #nt0 x #SVD components
         % vvv save first Ncomps components of U, containing initial rotation and scaling matrix
-        rez.U(:, t, :) = gather(wsign * u(:, 1:Ncomps) * s(1:Ncomps, 1:Ncomps));
+        rez.U(:, t, :) = gather(wsign * u(:, 1:Ncomps) * s(1:Ncomps, 1:Ncomps)); % shape is #channels x #PC components
         rez.mu(t) = gather(sum(sum(rez.U(:, t, :) .^ 2)) ^ .5); % get norm of U
         rez.U(:, t, :) = rez.U(:, t, :) / rez.mu(t); % normalize U
         if ops.fig
@@ -172,4 +172,15 @@ function [rez, spike_times_for_kid] = template_learning(rez, tF, st3)
     rez.ops.wPCA = wPCA;
     % remove any NaNs from rez.W
     rez.W(isnan(rez.W)) = 0;
+    % figure(333)
+    % % plot all PC components, spacing them by the 10x standard deviation of all
+    % % PC components
+    % cmap = colormap(cool(ops.nPCs));
+    % for i = 1:size(rez.W, 3)
+    %     plot(rez.W(:, 1, i) - 10 * std(rez.W(:)) * i, 'k');
+    %     hold on;
+    %     % set aspect ratio as 2 height width 1
+    %     pbaspect([1 2 1])
+    % end
+    % keyboard
 end

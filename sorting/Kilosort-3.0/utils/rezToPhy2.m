@@ -211,3 +211,4 @@ function rezToPhy2(rez, savePath, varargin)
             fclose(fid);
         end
     end
+end

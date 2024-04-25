@@ -305,6 +305,7 @@ function rez = preprocessDataSub(ops)
         end
         rez.ops.channelDelays = channelDelays; % save channel delays to rez
         % figure(222); hold on;
+        % set figure line size to be triple
         % remove channel delays from proc.dat by seeking through the batches
         % with ibatch*NT+max(channelDelays) and shifting each delayed channel backwards
         % by the appropriate amount found in channelDelays
@@ -316,7 +317,16 @@ function rez = preprocessDataSub(ops)
         end
         data = fread(fidOff, [NchanTOT inf], '*int16'); % read and reshape. Assumes int16 data
         % circularly shift each channel by the appropriate amount
-        % plot(data')
+        % set colormap
+        % colormap hsv
+        % start_idx = 600000;
+        % end_idx = 1800000;
+        % num_chans = size(data, 1);
+        % chan_idxs = 2:2:num_chans;
+        % plot(data(chan_idxs, start_idx:end_idx)', "LineWidth", 2); % plot original data
+        % for iChan = 1:size(data, 1)
+        %     plot(data(iChan, start_idx:end_idx)', "LineWidth", 2) % plot original data
+        % end
         for i = 1:length(channelDelays)
             try
                 data(i, :) = circshift(data(i, :), channelDelays(i));
@@ -325,7 +335,14 @@ function rez = preprocessDataSub(ops)
             end 
                 
         end
-        % plot(data' + max(abs(data(:)))) % plot shifted data
+        % re set colormap to hsv so that the colors are the same
+        % set(gca,'ColorOrderIndex',1)
+        % offset the data by 20X the std of the data
+        % twenty5_X_std = 25 * std(single(data(:)));
+        % plot(data(chan_idxs, start_idx:end_idx)' - int16(twenty5_X_std), "LineWidth", 2); % plot shifted data
+        % for iChan = 1:size(data, 1)
+            % plot(data(iChan, start_idx:end_idx)' + ten_X_std, "LineWidth", 2) % plot shifted data
+        % end
         fseek(fidOff, 0, 'bof'); % fseek to start in raw file, to overwrite
         fwrite(fidOff, data, 'int16');
         fclose(fidOff);
