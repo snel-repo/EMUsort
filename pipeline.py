@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import scipy.io
+
 from ibllib.ephys.spikes import ks2_to_alf
 from ruamel.yaml import YAML
 
