@@ -1,0 +1,3 @@
+[submodule "sorting/Kilosort4"]
+	path = sorting/Kilosort4
+	url = https://github.com/snel-repo/Kilosort4

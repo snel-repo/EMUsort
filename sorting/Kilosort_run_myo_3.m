@@ -1,4 +1,4 @@
-function rez = Kilosort_run_myo_3_czuba(ops_input_params, worker_id, worker_dir)
+function rez = Kilosort_run_myo_3(ops_input_params, worker_id, worker_dir)
     script_dir = pwd; % get directory where repo exists
     load(fullfile(script_dir, '/tmp/config.mat'))
     load(fullfile(myo_sorted_dir, 'brokenChan.mat'))
@@ -155,6 +155,21 @@ function rez = Kilosort_run_myo_3_czuba(ops_input_params, worker_id, worker_dir)
     disp(['Saving rez and ops structs to', ops.saveDir])
     ops % show final ops struct in command window
     rez % show final rez struct in command window
+
+    % plot temporal and spatial components
+    if ops.fig
+        figure(333)
+        % plot all PC components, spacing them by the 10x standard deviation of all
+        % PC components
+        cmap = colormap(cool(ops.nPCs));
+        for i = 1:size(rez.W, 3)
+            plot(rez.W(:, 1, i) - 10 * std(rez.W(:)) * i, 'Color', cmap(i, :), 'LineWidth', 3)
+            hold on;
+            % set aspect ratio as 2 height width 1
+            pbaspect([1 2 1])
+        end
+        keyboard
+    end
 
     % save variables as full struct, for MATLAB
     save(fullfile(ops.saveDir, '/ops_struct.mat'), 'ops');
