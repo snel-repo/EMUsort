@@ -5,11 +5,10 @@ channels:
   - nvidia/label/cuda-11.3.1
   - pytorch
 dependencies:
-  - cuda-nvcc
+  #- cuda-nvcc
   - cudatoolkit-dev=11.3
   - cupy
   - cython
-  - dask
   - h5py
   - joblib
   - matplotlib
@@ -47,7 +46,4 @@ dependencies:
   - wheel
   - pip:
       - git+https://github.com/cortex-lab/phy.git
-      - ibl-neuropixel==0.4.1
-      - ibllib==2.20.0
-      - iblutil==1.5.0
       - spikeinterface
