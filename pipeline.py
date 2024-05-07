@@ -11,7 +11,6 @@ from pathlib import Path
 
 import numpy as np
 import scipy.io
-from kilosort import run_kilosort
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 
