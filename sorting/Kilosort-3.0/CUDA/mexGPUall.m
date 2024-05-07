@@ -24,7 +24,7 @@
         mexcuda -largeArrayDims -dynamic -DENABLE_STABLEMODE mexMPnu8_pcTight.cu
     else
         % mexcuda -largeArrayDims mexMPnu8.cu
-        mexcuda -largeArrayDims mexMPnu8_pcTight.cu
+        mexcuda -largeArrayDims mexMPnu8.cu
     end
 
     % mexcuda -largeArrayDims mexSVDsmall2.cu
