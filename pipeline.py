@@ -11,13 +11,13 @@ from pathlib import Path
 
 import numpy as np
 import scipy.io
+from sklearn.model_selection import ParameterGrid
+
 from ibllib.ephys.spikes import ks2_to_alf
 from ruamel.yaml import YAML
+from kilosort import run_kilosort
 
 from pipeline_utils import create_config, extract_LFP, extract_sync, find
-
-# from registration.registration import registration as registration_function
-from sorting.EMUsort_gridsearch_config import get_params_grid
 
 # calculate time taken to run each pipeline call
 start_time = datetime.datetime.now()
@@ -46,24 +46,16 @@ else:
         f"Usage: {sys.argv[0]} -f argument must be present. Also, ensure environment is activated."
     )
 
-registration = False
-registration_final = False
 config = False
 myo_config = False
 myo_sort = False
 myo_post = False
 myo_plot = False
 myo_phy = False
-neuro_config = False
-neuro_sort = False
-neuro_post = False
 lfp_extract = False
 cluster = False
 in_cluster = False
-if "-registration" in opts:
-    registration = True
-if "-registration_final" in opts:
-    registration_final = True
+
 if "-config" in opts:
     config = True
 if "-myo_config" in opts:
@@ -76,49 +68,9 @@ if "-myo_plot" in opts:
     myo_plot = True
 if "-myo_phy" in opts:
     myo_phy = True
-if "-neuro_config" in opts:
-    neuro_config = True
-if "-neuro_sort" in opts:
-    neuro_sort = True
-if "-neuro_post" in opts:
-    neuro_post = True
-if "-lfp_extract" in opts:
-    lfp_extract = True
 if "-full" in opts:
-    registration = True
     myo_sort = True
     myo_post = True
-    neuro_sort = True
-    neuro_post = True
-if "-cluster" in opts:
-    cluster = True
-if "-in_cluster" in opts:
-    in_cluster = True
-
-if cluster:
-    home = os.path.expanduser("~/")
-    child_folder = Path(folder)
-    child_folder = str(child_folder.stem)
-    with open(home + "scratch/slurm_job.sh", "w") as f:
-        f.write(
-            "#!/bin/bash\n#SBATCH --gres=gpu:1\n#SBATCH --cpus-per-task=16\n"
-            + "#SBATCH --mem=32G\n#SBATCH --time=1-00:00\n#SBATCH --account=def-andpru\n"
-            + "module purge\nnvidia-smi\nsource ~/pipeline/bin/activate\n"
-            + "scp -r "
-            + folder
-            + " $SLURM_TMPDIR/"
-            + child_folder
-            + "\n"
-            + "module load gcc/9.3.0 arrow python/3.8.10 scipy-stack\n"
-            + "python3 ~/PixelProcessingPipeline/pipeline.py -f $SLURM_TMPDIR/"
-            + child_folder
-            + " -registration -in_cluster"
-        )
-    os.chdir(home + "scratch")
-    os.system("sbatch slurm_job.sh")
-    registration = False
-    myo_sort = False
-    neuro_sort = False
 
 # Search working folder for existing configuration file
 config_file = find("config.yaml", folder)
@@ -149,29 +101,6 @@ with open(config_file) as f:
 
 # Check config for missing information and attempt to auto-fill
 config["folder"] = folder
-temp_folder = glob.glob(folder + "/*_g0")
-if len(temp_folder) > 1:
-    raise SystemExit("There shouldn't be more than one Neuropixel folder")
-elif len(temp_folder) == 0:
-    print("No Neuropixel data in this recording session")
-    config["neuropixel"] = ""
-else:
-    if os.path.isdir(temp_folder[0]):
-        config["neuropixel"] = temp_folder[0]
-    else:
-        raise SystemExit("Provided folder is not valid")
-if config["neuropixel"] != "":
-    temp_folder = glob.glob(config["neuropixel"] + "/" + "*_g*")
-    config["num_neuropixels"] = len(temp_folder)
-    print(
-        "Using neuropixel folder "
-        + config["neuropixel"]
-        + " containing "
-        + str(config["num_neuropixels"])
-        + " neuropixel"
-    )
-else:
-    config["num_neuropixels"] = 0
 
 temp_folder = glob.glob(folder + "/*_myo")
 if len(temp_folder) > 1:
@@ -203,6 +132,11 @@ if not "num_KS_components" in config["Sorting"]:
     config["Sorting"]["num_KS_components"] = 9
 if not "do_KS_param_gridsearch" in config["Sorting"]:
     config["Sorting"]["do_KS_param_gridsearch"] = False
+if not "gridsearch_params" in config["Sorting"]:
+    config["Sorting"]["gridsearch_params"] = dict(
+        Th=[[10, 4], [7, 3], [5, 2], [2, 1]],
+        spkTh=[[-3], [-6], [-9], [-3, -6], [-6, -9]],
+    )
 # ensure Session fields are present in config
 if not "myo_chan_map_file" in config["Session"]:
     config["myo_chan_map_file"] = [
@@ -238,9 +172,6 @@ assert config["recordings"][0] == "all" or all(
 assert all(
     [(item >= 0 and isinstance(item, int)) for item in config["GPU_to_use"]]
 ), "'GPU_to_use' field must be greater than or equal to 0"
-assert (
-    config["num_neuropixels"] >= 0
-), "Number of neuropixels must be greater than or equal to 0"
 assert (
     config["Sorting"]["num_KS_components"] >= 1
 ), "Number of KS components must be greater than or equal to 1"
@@ -448,15 +379,10 @@ if in_cluster:
     config["in_cluster"] = True
 else:
     config["in_cluster"] = False
-config["registration_final"] = registration_final
 
 # Save config file with up-to-date information
 with open(config_file, "w") as f:
     yaml.dump(config, f)
-
-# Proceed with registration
-if registration or registration_final:
-    registration_function(config)
 
 # Prepare common kilosort config
 with open(config_file) as f:
@@ -468,101 +394,10 @@ config_kilosort["channel_list"] = 1
 if not os.path.isdir(f"{config['script_dir']}/tmp"):
     os.mkdir(f"{config['script_dir']}/tmp")
 
-# Convenience function to edit neuro sorting config file
-if neuro_config:
-    if os.name == "posix":  # detect Unix
-        subprocess.run(
-            f"nano {config['script_dir']}/sorting/Kilosort_run.m",
-            shell=True,
-            check=True,
-        )
-        print('Configuration for "-neuro_sort" done.')
-        subprocess.run(
-            f"nano {config['script_dir']}/sorting/resorter/neuropixel_call.m",
-            shell=True,
-            check=True,
-        )
-        print('Configuration for "-neuro_post" done.')
-    elif os.name == "nt":  # detect Windows
-        subprocess.run(
-            f"notepad {config['script_dir']}/sorting/Kilosort_run.m",
-            shell=True,
-            check=True,
-        )
-        print('Configuration for "-neuro_sort" done.')
-
-# Proceed with neural spike sorting
-if neuro_sort:
-    config_kilosort = {
-        "script_dir": config["script_dir"],
-        "trange": np.array(config["Session"]["trange"]),
-    }
-    config_kilosort["type"] = 1
-    neuro_folders = glob.glob(config["neuropixel"] + "/*_g*")
-    path_to_add = script_folder + "/sorting/"
-    for pixel in range(config["num_neuropixels"]):
-        config_kilosort["neuropixel_folder"] = neuro_folders[pixel]
-        tmp = glob.glob(neuro_folders[pixel] + "/*_t*.imec" + str(pixel) + ".ap.bin")
-        config_kilosort["neuropixel"] = tmp[0]
-        if len(find("sync.mat", config_kilosort["neuropixel_folder"])) > 0:
-            print("Found existing sync file")
-        else:
-            print(
-                "Extracting sync signal from "
-                + config_kilosort["neuropixel"]
-                + " and saving"
-            )
-            extract_sync(config_kilosort)
-
-        # print('Starting drift correction of ' + config_kilosort['neuropixel'])
-        # kilosort(config_kilosort)
-
-        print("Starting spike sorting of " + config_kilosort["neuropixel"])
-        scipy.io.savemat(f"{config['script_dir']}/tmp/config.mat", config_kilosort)
-        subprocess.run(
-            [
-                f"{matlab_root}",
-                "-nodisplay",
-                "-nosplash",
-                "-nodesktop",
-                "-r",
-                f"addpath(genpath('{path_to_add}')); Kilosort_run_czuba",
-            ],
-            check=True,
-        )
-
-        print("Starting alf post-processing of " + config_kilosort["neuropixel"])
-        alf_dir = Path(config_kilosort["neuropixel_folder"] + "/sorted/alf")
-        shutil.rmtree(alf_dir, ignore_errors=True)
-        ks_dir = Path(config_kilosort["neuropixel_folder"] + "/sorted")
-        ks2_to_alf(ks_dir, Path(config_kilosort["neuropixel"]), alf_dir)
-
-# Proceed with neuro post-processing
-if neuro_post:
-    config_kilosort = {"script_dir": config["script_dir"]}
-    neuro_folders = glob.glob(config["neuropixel"] + "/*_g*")
-    path_to_add = script_folder + "/sorting/"
-    for pixel in range(config["num_neuropixels"]):
-        config_kilosort["neuropixel_folder"] = (
-            neuro_folders[pixel] + "/kilosort2/sorter_output"
-        )
-        scipy.io.savemat(f"{config['script_dir']}/tmp/config.mat", config_kilosort)
-        subprocess.run(
-            [
-                f"{matlab_root}",
-                "-nodisplay",
-                "-nosplash",
-                "-nodesktop",
-                "-r",
-                f"addpath(genpath('{path_to_add}')); neuropixel_call",
-            ],
-            check=True,
-        )
-
 if myo_config:
     if os.name == "posix":  # detect Unix
         subprocess.run(
-            f"nano {config['script_dir']}/sorting/Kilosort_run_myo_3_czuba.m",
+            f"nano {config['script_dir']}/sorting/Kilosort_run_myo_3.m",
             shell=True,
             check=True,
         )
@@ -575,7 +410,7 @@ if myo_config:
         print('Configuration for "-myo_post" done.')
     elif os.name == "nt":  # detect Windows
         subprocess.run(
-            f"notepad {config['script_dir']}/sorting/Kilosort_run_myo_3_czuba.m",
+            f"notepad {config['script_dir']}/sorting/Kilosort_run_myo_3.m",
             shell=True,
             check=True,
         )
@@ -655,15 +490,15 @@ if myo_sort:
         # check if user wants to do grid search of KS params
         if config["Sorting"]["do_KS_param_gridsearch"] == 1:
             iParams = list(
-                get_params_grid()
+                ParameterGrid(config["Sorting"]["gridsearch_params"])
             )  # get iterator of all possible param combinations
         else:
             # just pass an empty string to run once with chosen params
             iParams = [""]
 
-        worker_ids = np.arange(config["num_KS_jobs"])
         # create new folders if running in parallel
         if config["num_KS_jobs"] > 1:
+            worker_ids = np.arange(config["num_KS_jobs"])
             # ensure proper configuration for parallel jobs
             assert config["num_KS_jobs"] <= len(
                 config["GPU_to_use"]
@@ -680,6 +515,8 @@ if myo_sort:
                 shutil.copytree(config_kilosort["myo_sorted_dir"], new_sorted_dir)
             # split iParams according to number of parallel jobs
             iParams_split = np.array_split(iParams, config["num_KS_jobs"])
+        else:
+            worker_id = 0  # scalar for single job
 
         def run_KS_sorting(iParams, worker_id):
             iParams = iter(iParams)
@@ -702,7 +539,7 @@ if myo_sort:
                         these_params = next(iParams)
                         if type(these_params) == dict:
                             print(
-                                f"Using these KS params from EMUsort_gridsearch_config.py"
+                                f"Using KS params from config['Sorting']['gridsearch_params'] for gridsearch:"
                             )
                             print(these_params)
                             param_keys = list(these_params.keys())
@@ -715,7 +552,9 @@ if myo_sort:
                             # this is a comma-separated string of key-value pairs
                             passable_params = ",".join(str(p) for p in flattened_params)
                         elif type(these_params) == str:
-                            print(f"Using KS params from Kilosort_run_myo_3_czuba.m")
+                            print(
+                                f"Using KS params from Kilosort_run_myo_3.m for single job"
+                            )
                             passable_params = (
                                 these_params  # this is a string: 'default'
                             )
@@ -723,9 +562,9 @@ if myo_sort:
                             print("ERROR: KS params must be a dictionary or a string.")
                             raise TypeError
                         if config["Sorting"]["do_KS_param_gridsearch"] == 1:
-                            command_str = f"Kilosort_run_myo_3_czuba(struct({passable_params}),{worker_id},'{str(worker_dir)}');"
+                            command_str = f"Kilosort_run_myo_3(struct({passable_params}),{worker_id},'{str(worker_dir)}');"
                         else:
-                            command_str = f"Kilosort_run_myo_3_czuba('{passable_params}',{worker_id},'{str(worker_dir)}');"
+                            command_str = f"Kilosort_run_myo_3('{passable_params}',{worker_id},'{str(worker_dir)}');"
                         subprocess.run(
                             [
                                 f"{matlab_root}",
@@ -831,7 +670,7 @@ if myo_sort:
                 executor.map(run_KS_sorting, iParams_split, worker_ids)
         else:
             # run single job
-            run_KS_sorting(iParams, worker_ids[0])
+            run_KS_sorting(iParams, worker_id)
 
 # Proceed with myo post-processing
 if myo_post:
@@ -972,21 +811,6 @@ if myo_phy:
             "params.py",
         ],
     )
-
-# Proceed with LFP extraction
-if lfp_extract:
-    config_kilosort["type"] = 1
-    neuro_folders = glob.glob(f"{config['neuropixel']}'/*_g*")
-    for pixel in range(config["num_neuropixels"]):
-        config_kilosort["neuropixel_folder"] = neuro_folders[pixel]
-        tmp = glob.glob(f"{neuro_folders[pixel]}/*_t*.imec{str(pixel)}.ap.bin")
-        config_kilosort["neuropixel"] = tmp[0]
-        if len(find("lfp.mat", config_kilosort["neuropixel_folder"])) > 0:
-            print("Found existing LFP file")
-        else:
-            print(f"Extracting LFP from {config_kilosort['neuropixel']} and saving")
-            extract_LFP(config_kilosort)
-
 
 print("Pipeline finished! You've earned a break.")
 finish_time = datetime.datetime.now()
