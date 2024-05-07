@@ -1,5 +1,5 @@
 ---
-name: pipeline
+name: emu
 channels:
   - conda-forge
   - nvidia/label/cuda-11.3.1

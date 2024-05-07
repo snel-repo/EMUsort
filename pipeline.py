@@ -11,13 +11,11 @@ from pathlib import Path
 
 import numpy as np
 import scipy.io
+from kilosort import run_kilosort
+from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 
-from ibllib.ephys.spikes import ks2_to_alf
-from ruamel.yaml import YAML
-from kilosort import run_kilosort
-
-from pipeline_utils import create_config, extract_LFP, extract_sync, find
+from pipeline_utils import create_config, find
 
 # calculate time taken to run each pipeline call
 start_time = datetime.datetime.now()
