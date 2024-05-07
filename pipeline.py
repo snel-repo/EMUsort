@@ -15,6 +15,7 @@ from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 
 from pipeline_utils import create_config, find
+from sorting.Kilosort4.kilosort import run_kilosort
 
 # calculate time taken to run each pipeline call
 start_time = datetime.datetime.now()
