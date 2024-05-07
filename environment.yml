@@ -5,7 +5,7 @@ channels:
   - nvidia/label/cuda-11.3.1
   - pytorch
 dependencies:
-  - cuda-nvcc
+  #- cuda-nvcc
   - cudatoolkit-dev=11.3
   - cupy
   - cython
