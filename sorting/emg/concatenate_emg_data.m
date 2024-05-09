@@ -1,5 +1,5 @@
-function concatenate_myo_data(myomatrix_folder, recordings_to_concatenate)
-    listing = struct2cell(dir(myomatrix_folder));
+function concatenate_emg_data(open_ephys_data_folder, recordings_to_concatenate)
+    listing = struct2cell(dir(open_ephys_data_folder));
     subdir = listing(1, :);
     recordNodeFolders = [];
     dbstop if error
@@ -10,10 +10,10 @@ function concatenate_myo_data(myomatrix_folder, recordings_to_concatenate)
         end
     end
     if length(recordNodeFolders) > 1
-        error("Multiple 'Record Node' folders found in the myomatrix folder. Please remove all but one.")
+        error("Multiple 'Record Node' folders found in the emg folder. Please remove all but one.")
     end
     for i = 1:length(recordNodeFolders)
-        currNode = strcat(myomatrix_folder, '/', recordNodeFolders{i});
+        currNode = strcat(open_ephys_data_folder, '/', recordNodeFolders{i});
         folders = struct2cell(dir(currNode));
         subdir = folders(1, :);
         experimentFolders = [];

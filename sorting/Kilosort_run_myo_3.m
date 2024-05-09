@@ -1,17 +1,17 @@
 function rez = Kilosort_run_myo_3(ops_input_params, worker_id, worker_dir)
-    script_dir = pwd; % get directory where repo exists
-    load(fullfile(script_dir, '/tmp/config.mat'))
-    load(fullfile(myo_sorted_dir, 'brokenChan.mat'))
+    repo_folder = pwd; % get directory where repo exists
+    load(fullfile(repo_folder, '/tmp/config.mat'))
+    load(fullfile(sorted_folder, 'brokenChan.mat'))
 
     if num_KS_jobs > 1
-        myo_sorted_dir = [myo_sorted_dir num2str(worker_id)];
+        sorted_folder = [sorted_folder num2str(worker_id)];
     else
         dbstop if error % stop if error, only if one job, to avoid destroying terminal interactivity
     end
 
     % get and set channel map
     % if ~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false
-    chanMapFile = fullfile(myo_sorted_dir, 'chanMapAdjusted.mat');
+    chanMapFile = fullfile(sorted_folder, 'chanMapAdjusted.mat');
     % else
     %     chanMapFile = myo_chan_map_file;
     % end
@@ -21,21 +21,21 @@ function rez = Kilosort_run_myo_3(ops_input_params, worker_id, worker_dir)
     try
         restoredefaultpath
     end
-    addpath(genpath([script_dir '/sorting/Kilosort-3.0']))
-    addpath(genpath([script_dir '/sorting/npy-matlab']))
+    addpath(genpath([repo_folder '/sorting/Kilosort-3.0']))
+    addpath(genpath([repo_folder '/sorting/npy-matlab']))
 
     % phyDir = 'sorted-czuba';
     % rootZ = [neuropixel_folder '/'];
     % rootH = [rootZ phyDir '/'];
     % mkdir(rootH);
 
-    run([script_dir '/sorting/Kilosort_config_czuba.m']);
+    run([repo_folder '/sorting/Kilosort_config_czuba.m']);
     % ops.fbinary = fullfile(neuropixel);
     % ops.fproc = fullfile(rootH, 'proc.dat');
     % ops.chanMap = fullfile(chanMapFile);
     % ops.NchanTOT = 385;
     % ops.saveDir = rootH;
-    ops.saveDir = myo_sorted_dir; % set directory for writes
+    ops.saveDir = sorted_folder; % set directory for writes
     ops.fbinary = fullfile(ops.saveDir, 'data.bin');
     ops.fproc = fullfile(ops.saveDir, 'proc.dat');
     ops.brokenChan = fullfile(ops.saveDir, 'brokenChan.mat');
@@ -84,10 +84,10 @@ function rez = Kilosort_run_myo_3(ops_input_params, worker_id, worker_dir)
 
     disp(['Using ' ops.fbinary])
 
-    if trange(2) == 0
+    if time_range(2) == 0
         ops.trange = [0 Inf];
     else
-        ops.trange = double(trange);
+        ops.trange = double(time_range);
     end
 
     % create parallel pool for all downstream parallel processing

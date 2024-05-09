@@ -1,76 +1,66 @@
 ---
 # Configuration file
 # Auto-generated parameters
-# GPU to use for kilosort, (a list of integers, e.g., [1,2,5,6])
-GPU_to_use: [0]
-# number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
-# setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is True
-num_KS_jobs: 1
-# path of working directory (must be provided in command line)
-folder:
-# path to myomatrix directory (should end in _myo)
-myomatrix:
+
+# path to repo and EMUsort.py script (always overwritten by program)
+repo_folder:
+# path to session folder (must be provided in command line)
+session_folder:
+# path to working folder, for sort stor (should end in '_emg', then it will be auto-populated)
+working_folder:
 # specify recordings to process (can be [all] or a list of integers, e.g., [1,2,5,6])
-recordings: [1]
-# whether to concatenate myomatrix data
-concatenate_myo_data: False
-# set bandpass filter settings for myomatrix data
-myo_data_passband:
+emg_recordings: [1]
+# whether to concatenate emg data (must be Open Ephys folder tree format)
+concatenate_recordings: False
+# set bandpass filter settings for emg data
+emg_passband:
     - 250
     - 5000
-# set bandpass filter settings for myomatrix data
-myo_data_sampling_rate: 30000
-# path to .kinarm files
-kinarm:
-# path to pipeline.py script (always overwritten by program)
-script_dir:
+# set bandpass filter settings for emg data
+emg_sampling_rate: 30000
+time_range: # can be used to slice along time, set start and end to 0 to use all data
+    - 0
+    - 0
 # Sorting parameters
 Sorting:
-    num_KS_components: 9
+    batch_size_seconds: 2 # seconds
+    num_KS_components: 6
+    # GPU to use for kilosort, (a list of integers, e.g., [1,2,5,6])
+    GPU_to_use: [0]
+    # number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
+    # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is True
+    num_KS_jobs: 1
     do_KS_param_gridsearch: False
     gridsearch_params: # 
-        Th: # [[10, 4], [7, 3], [5, 2], [2, 1]]
+        Th: # in format [Th_learned, Th_universal] for each element
+            - [9, 8]
             - [10, 4]
             - [7, 3]
             - [5, 2]
             - [2, 1]
-        spkTh: # [[-3], [-6], [-9], [-3, -6], [-6, -9]]
-            - [-3]
-            - [-6]
-            - [-9]
-            - [-3, -6]
-            - [-6, -9]
-# Session-specific parameters
-Session:
-    trange:
-        - 0
-        - 0
-    myo_chan_map_file:
-        - linear_16ch_RF400_kilosortChanMap_unitSpacing.mat
-        - linear_16ch_RF400_kilosortChanMap_unitSpacing.mat
-    myo_chan_list:
-        - [1, 16]
-        - [17, 32]
-    ## Remove bad channels from myomatrix data
+        spkTh: # Th_single_ch
+            - [6]
+            - [3]
+            - [9]
+            # - [-3, -6]
+            # - [-6, -9]
+# Group-specific parameters (Groups are sorted separately)
+Group:
+    emg_chan_map_file: # List of strings, each string is the channel map filename in /geometries 
+        - linear_08ch_sequential_kilosortChanMap_2um.mat
+    emg_chan_list: # List of lists of channels, the channels in each sublist are sorted separately
+        - [1, 8]
+    ## Remove bad channels from emg data
     # This can be a sequence of booleans, of strings, or of lists:
     # Booleans: True for automatic bad channel removal (defaults to reject below median), False to include all channels.
     # Strings: Provide 'median', 'mean', 'mean-1std', 'percentileXX', or 'lowestYY' (XX,YY are numeric, 0<XX<100, and 0<YY<Nchans)
     #          to remove channels below the corresponding threshold.
     # Lists: Provide an integer list of channels to remove those channels for that session, e.g., [1,2,3,4]
-    remove_bad_myo_chans:
-        - True
-        - True
+    remove_bad_emg_chans:
+        - False
     remove_channel_delays:
-        - True
-        - True
-    myo_analog_chan: 33
-    myo_muscle_list:
-        - Bicep
+        - False
+    emg_muscle_list:
         - Tricep
-    brain_coord_list:
-        - [1, 1]
-        - [2, 2]
-    brain_area_list:
-        - M1
-        - PMd
-
+# index for the analog channel in the emg data (optional)
+emg_analog_chan: 9

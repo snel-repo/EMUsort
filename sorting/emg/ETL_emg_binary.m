@@ -1,5 +1,6 @@
-script_dir = pwd; % get directory where repo exists
-load(fullfile(script_dir, '/tmp/config.mat'))
+% this script is used to Extract, Transform, and Load (ETL) EMG data into a binary file for Kilosort processing
+repo_folder = pwd; % get directory where repo exists
+load(fullfile(repo_folder, '/tmp/config.mat'))
 
 % for use with monopolar (% should remove this eventually)
 % channelRemap = [23:-1:8 24:31 0:7] + 1;
@@ -10,45 +11,45 @@ load(fullfile(script_dir, '/tmp/config.mat'))
 
 chanList = chans(1):chans(2);
 disp(['Starting with these channels: ' num2str(chanList)])
-disp(['Using this channel map: ' myo_chan_map_file])
+disp(['Using this channel map: ' emg_chan_map_file])
 
 dataChan = chanList;
-if not(isfolder([myo_sorted_dir '/']))
-    mkdir([myo_sorted_dir '/']);
+if not(isfolder([sorted_folder '/']))
+    mkdir([sorted_folder '/']);
 end
 
 % Check if we're dealing with .dat or .continuous
-oebin = dir([myomatrix_data '/structure.oebin']);
+oebin = dir([emg_data_folder '/structure.oebin']);
 if isempty(oebin)
-    ff = dir([myomatrix_data '/100_CH*' num2str(dataChan(1)) '.continuous']);
+    ff = dir([emg_data_folder '/100_CH*' num2str(dataChan(1)) '.continuous']);
     if isempty(ff)
         prefix = [];
     else
         prefix = 'CH';
     end
-    tempdata = load_open_ephys_data([myomatrix_data '/100_' prefix num2str(dataChan(1)) '.continuous']);
+    tempdata = load_open_ephys_data([emg_data_folder '/100_' prefix num2str(dataChan(1)) '.continuous']);
     tL = length(tempdata);
     clear tempdata
     data = zeros(tL, length(dataChan), 'int16');
     for chan = 1:length(dataChan)
-        data(:, chan) = load_open_ephys_data([myomatrix_data '/100_' prefix num2str(dataChan(chan)) '.continuous']);
+        data(:, chan) = load_open_ephys_data([emg_data_folder '/100_' prefix num2str(dataChan(chan)) '.continuous']);
     end
-    ff = dir([myomatrix_data '/100_*' num2str(sync_chan) '.continuous']);
+    ff = dir([emg_data_folder '/100_*' num2str(emg_analog_chan) '.continuous']);
     analogData = load_open_ephys_data([ff(1).folder '/' ff(1).name]);
 else
     tempdata = load_open_ephys_binary([oebin(1).folder '/' oebin(1).name], 'continuous', 1, 'mmap');
     %data = zeros(size(tempdata.Data,2), length(dataChan), 'int16');
-    if trange(2) == 0
+    if time_range(2) == 0
         ops.trange = [1 size(tempdata.Data.Data(1).mapped, 2)];
     else
-        ops.trange = trange * myo_data_sampling_rate + 1;
+        ops.trange = time_range * emg_sampling_rate + 1;
     end
     data = tempdata.Data.Data(1).mapped(dataChan, ops.trange(1):ops.trange(2))';
     try
-        analogData = tempdata.Data.Data(1).mapped(sync_chan, ops.trange(1):ops.trange(2))';
+        analogData = tempdata.Data.Data(1).mapped(emg_analog_chan, ops.trange(1):ops.trange(2))';
     catch ME % to avoid "Index in position 1 exceeds array bounds (must not exceed XX)."
         if strcmp(ME.identifier, 'MATLAB:badsubscript')
-            disp("No sync channel found, cannot save sync data")
+            disp("WARNING: No analog channel found, cannot save sync data")
             analogData = [];
         else
             rethrow(ME)
@@ -69,12 +70,12 @@ if ~isempty(analogData)
     sync = logical(round(analogData / max(analogData)));
     clear analogData
 
-    save([myomatrix '/sync'], 'sync')
+    save([sorted_folder '/sync'], 'sync')
     clear sync
-    disp('Saved sync data')
+    disp('Saved analog data into "sync" folder within corresponding sorted_folder')
 end
 
-disp(['Total recording time: ' num2str(size(data, 1) / myo_data_sampling_rate / 60) ' minutes'])
+disp(['Total recording time: ' num2str(size(data, 1) / emg_sampling_rate / 60) ' minutes'])
 
 clf
 S = zeros(size(data, 2), 3);
@@ -85,20 +86,20 @@ S = zeros(size(data, 2), 3);
 % when q is 3, we will compute the SNR of the channel
 for q = 1:4
     if q == 1
-        [b, a] = butter(2, [250 4400] / (myo_data_sampling_rate / 2), 'bandpass');
+        [b, a] = butter(2, [250 4400] / (emg_sampling_rate / 2), 'bandpass');
     elseif q == 2
-        [b, a] = butter(2, [5 100] / (myo_data_sampling_rate / 2), 'bandpass');
+        [b, a] = butter(2, [5 100] / (emg_sampling_rate / 2), 'bandpass');
     elseif q == 3
-        [b, a] = butter(2, 10000 / (myo_data_sampling_rate / 2), 'high');
+        [b, a] = butter(2, 10000 / (emg_sampling_rate / 2), 'high');
     elseif q == 4
-        [b, a] = butter(2, [300 1000] / (myo_data_sampling_rate / 2), 'bandpass');
+        [b, a] = butter(2, [300 1000] / (emg_sampling_rate / 2), 'bandpass');
     end
     useSeconds = 600;
-    if size(data, 1) < useSeconds * 2 * myo_data_sampling_rate
-        useSeconds = floor(size(data, 1) / myo_data_sampling_rate / 2) - 1;
+    if size(data, 1) < useSeconds * 2 * emg_sampling_rate
+        useSeconds = floor(size(data, 1) / emg_sampling_rate / 2) - 1;
     end
-    tRange = size(data, 1) - round(size(data, 1) / 2) - round(myo_data_sampling_rate * useSeconds / 2):size(data, 1) ...
-        - round(size(data, 1) / 2) + round(myo_data_sampling_rate * useSeconds / 2);
+    tRange = size(data, 1) - round(size(data, 1) / 2) - round(emg_sampling_rate * useSeconds / 2):size(data, 1) ...
+        - round(size(data, 1) / 2) + round(emg_sampling_rate * useSeconds / 2);
     data_norm = zeros(length(tRange), size(data, 2), 'single');
     data_filt = zeros(length(tRange), size(data, 2), 'single');
     for i = 1:size(data, 2)
@@ -118,7 +119,7 @@ for q = 1:4
         % normalize channels by std
         data_filt_norm = data_filt ./ repmat(std(data_filt, [], 1), [size(data_filt, 1) 1]);
         spk = sum(data_filt_norm < -7, 1); % check for spikes crossing 7 std below mean
-        S(:, q) = spk / size(data_filt_norm, 1) * myo_data_sampling_rate;
+        S(:, q) = spk / size(data_filt_norm, 1) * emg_sampling_rate;
     elseif q == 2
         S(:, q) = std(data_filt, [], 1); % get the std of the low freq noise
         % data_filt_norm = data_filt ./ repmat(S(:, q)', [size(data_filt, 1) 1]); % standardize
@@ -141,8 +142,8 @@ for q = 1:4
         MAD = median(abs(data_filt-mean(data_filt, 1)), 1);
         Gaussian_STDs = MAD / 0.6745;
         disp("Gaussian STDs: " + num2str(Gaussian_STDs))
-        if isa(remove_bad_myo_chans, "char")
-            rejection_criteria = remove_bad_myo_chans;
+        if isa(remove_bad_emg_chans, "char")
+            rejection_criteria = remove_bad_emg_chans;
         else
             rejection_criteria = 'median';
         end
@@ -162,7 +163,7 @@ for q = 1:4
             % ensure that the percentile is numeric and between 0 and 100
             percentile = str2double(rejection_criteria(11:end));
             if isnan(percentile) || percentile < 0 || percentile > 100
-                error("Error with 'remove_bad_myo_chans' setting in config.yaml. Numeric value after 'percentile' must be between 0 and 100")
+                error("Error with 'remove_bad_emg_chans' setting in config.yaml. Numeric value after 'percentile' must be between 0 and 100")
             end
             % reject channels with SNR < Nth percentile
             percentile_SNR = prctile(SNR, percentile);
@@ -171,7 +172,7 @@ for q = 1:4
             % ensure that the number of channels to reject is numeric and less than the number of channels
             N_reject = str2double(rejection_criteria(7:end));
             if isnan(N_reject) || N_reject < 0 || N_reject > length(chanList)
-                error("Error with 'remove_bad_myo_chans' setting in config.yaml. Numeric value after 'lowest' must be between 0 and " + length(chanList))
+                error("Error with 'remove_bad_emg_chans' setting in config.yaml. Numeric value after 'lowest' must be between 0 and " + length(chanList))
             end
             % reject N_reject lowest SNR channels
             SNR_reject_chans = idx(1:N_reject);
@@ -210,7 +211,7 @@ for q = 1:4
     % set(gca, 'YTick', (1:size(data, 2)) * 1600, 'YTickLabels', 1:size(data, 2))
     % axis([1 size(data_filt, 1) 0 (size(data, 2) + 1) * 1600])
 end
-print([myo_sorted_dir '/brokenChan.png'], '-dpng')
+print([sorted_folder '/brokenChan.png'], '-dpng')
 
 %if length(chanList) == 16
 %    % check for broken channels if meeting various criteria, including: high std, low spike rate, low SNR. Eliminate if any true
@@ -224,37 +225,37 @@ disp(['Automatically detected rejectable channels are: ' num2str(brokenChan')])
 % now actually remove the detected broken channels if True
 % if a list of broken channels is provided, use that instead
 % if false, just continue
-if isa(remove_bad_myo_chans(1), 'logical') || isa(remove_bad_myo_chans, 'char')
-    if remove_bad_myo_chans(1) == false
+if isa(remove_bad_emg_chans(1), 'logical') || isa(remove_bad_emg_chans, 'char')
+    if remove_bad_emg_chans(1) == false
         brokenChan = [];
-        disp('Not removing any broken/noisy channels, because remove_bad_myo_chans is false')
+        disp('Not removing any broken/noisy channels, because remove_bad_emg_chans is false')
         % disp(['Keeping channel list: ' num2str(chanList)])
-    elseif remove_bad_myo_chans(1) == true || isa(remove_bad_myo_chans, 'char')
+    elseif remove_bad_emg_chans(1) == true || isa(remove_bad_emg_chans, 'char')
         data(:, brokenChan) = [];
         chanList(brokenChan) = [];
         disp(['Just removed automatically detected broken/noisy channels: ' num2str(brokenChan')])
         disp(['New channel list is: ' num2str(chanList)])
     end
-elseif isa(remove_bad_myo_chans, 'integer')
+elseif isa(remove_bad_emg_chans, 'integer')
     zero_arr = zeros(1, length(chanList));
-    zero_arr(remove_bad_myo_chans) = 1;
-    remove_bad_myo_chans = logical(zero_arr);
-    brokenChan = remove_bad_myo_chans; % overwrite brokenChan with manually provided list
+    zero_arr(remove_bad_emg_chans) = 1;
+    remove_bad_emg_chans = logical(zero_arr);
+    brokenChan = remove_bad_emg_chans; % overwrite brokenChan with manually provided list
     data(:, brokenChan) = [];
     chanList(brokenChan) = [];
     disp(['Just removed manually provided broken/noisy channels: ' num2str(brokenChan)])
     disp(['New channel list is: ' num2str(chanList)])
 else
-    error('remove_bad_myo_chans must be a boolean, string with SNR rejection method, or an integer list of channels to remove')
+    error('remove_bad_emg_chans must be a boolean, string with SNR rejection method, or an integer list of channels to remove')
 end
 
-save([myo_sorted_dir '/chanList.mat'], 'chanList')
-save([myo_sorted_dir '/brokenChan.mat'], 'brokenChan');
+save([sorted_folder '/chanList.mat'], 'chanList')
+save([sorted_folder '/brokenChan.mat'], 'brokenChan');
 
 % load and modify channel map variables to remove broken channel elements, if desired
 disp("WARNING: Overriding chanMap ordering to sequential")
-if (~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false) || size(data,2)<num_KS_components
-    load(myo_chan_map_file)
+if (~isempty(brokenChan) && remove_bad_emg_chans(1) ~= false) || size(data,2)<num_KS_components
+    load(emg_chan_map_file)
     % if size(data, 2) >= num_KS_components
     %     chanMap(brokenChan) = []; % take off end to save indexing
     %     chanMap0ind(brokenChan) = []; % take off end to save indexing
@@ -273,32 +274,32 @@ if (~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false) || size(data,2)<nu
     xcoords = zeros(size(data, 2), 1);
     ycoords = (size(data, 2):-1:1)';
     % end
-    if (~isempty(brokenChan) && remove_bad_myo_chans(1) ~= false)
+    if (~isempty(brokenChan) && remove_bad_emg_chans(1) ~= false)
         disp('Broken channels were just removed from that channel map')
     end
-    save(fullfile(myo_sorted_dir, 'chanMapAdjusted.mat'), 'chanMap', 'connected', 'xcoords', ...
+    save(fullfile(sorted_folder, 'chanMapAdjusted.mat'), 'chanMap', 'connected', 'xcoords', ...
         'ycoords', 'kcoords', 'chanMap0ind', 'fs', 'name', 'numDummy', 'Gaussian_STDs')
 else
-    if ~exist(myo_chan_map_file, 'file')
+    if ~exist(emg_chan_map_file, 'file')
         error('Channel map file does not exist')
     end
-    copyfile(myo_chan_map_file, fullfile(myo_sorted_dir, 'chanMapAdjusted.mat'))
+    copyfile(emg_chan_map_file, fullfile(sorted_folder, 'chanMapAdjusted.mat'))
     % add numDummy to chanMapAdjusted.mat
-    load(fullfile(myo_sorted_dir, 'chanMapAdjusted.mat'))
+    load(fullfile(sorted_folder, 'chanMapAdjusted.mat'))
     numDummy = 0;
-    save(fullfile(myo_sorted_dir, 'chanMapAdjusted.mat'), 'chanMap', 'connected', 'xcoords', ...
+    save(fullfile(sorted_folder, 'chanMapAdjusted.mat'), 'chanMap', 'connected', 'xcoords', ...
         'ycoords', 'kcoords', 'chanMap0ind', 'fs', 'name', 'numDummy', 'Gaussian_STDs')
 end
 
 clear data_filt data_norm
 
-fileID = fopen([myo_sorted_dir '/data.bin'], 'w');
+fileID = fopen([sorted_folder '/data.bin'], 'w');
 % if true
 disp("Filtering raw data with passband:")
-disp(strcat(string(myo_data_passband(1)), "-", string(myo_data_passband(2)), " Hz"))
+disp(strcat(string(emg_passband(1)), "-", string(emg_passband(2)), " Hz"))
 mean_data = mean(data, 1);
-[b, a] = butter(4, myo_data_passband / (myo_data_sampling_rate / 2), 'bandpass');
-intervals = round(linspace(1, size(data, 1), round(size(data, 1) / (myo_data_sampling_rate * 5))));
+[b, a] = butter(4, emg_passband / (emg_sampling_rate / 2), 'bandpass');
+intervals = round(linspace(1, size(data, 1), round(size(data, 1) / (emg_sampling_rate * 5))));
 if numDummy > 0
     chanIdxsToFilter = 1:num_KS_components-numDummy;
 else
@@ -340,9 +341,9 @@ fclose(fileID);
 %     else
 %         bEMG = int16(mean(data(:, notBroken), 2));
 %     end
-%     save([myo_sorted_dir '/bulkEMG'], 'bEMG', 'notBroken', 'dataChan')
+%     save([sorted_folder '/bulkEMG'], 'bEMG', 'notBroken', 'dataChan')
 %     clear bEMG
 %     disp('Saved generated bulk EMG')
 % end
-disp('Saved myomatrix data binary')
+disp('Saved emg data binary')
 quit

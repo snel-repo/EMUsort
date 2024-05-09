@@ -2,23 +2,23 @@
 name: emu
 channels:
   - conda-forge
-  - nvidia/label/cuda-11.3.1
+  #- nvidia/label/cuda-11.3.1
   - pytorch
 dependencies:
   #- cuda-nvcc
-  - cudatoolkit-dev=11.3
+  - cudatoolkit-dev=11.6
   - cupy
   - cython
   - h5py
   - joblib
   - matplotlib
-  - numpy=1.23.5
+  - numpy
   - nvitop
   - pandas
   - pillow
   - pip
   - pydantic
-  - pyfftw=0.12.0
+  - pyfftw
   - pyopengl
   - pyopenssl
   - pyqt
@@ -26,8 +26,8 @@ dependencies:
   - pyqtgraph
   - pyqtwebengine
   - pytest
-  - python=3.8
-  - pytorch
+  - python=3.10
+  - pytorch=1.13
   - pywavelets
   - pyyaml
   - qtconsole
@@ -42,8 +42,9 @@ dependencies:
   - setuptools
   - torchvision
   - traitlets
-  - urllib3=1.26.15
+  - urllib3
   - wheel
   - pip:
       - git+https://github.com/cortex-lab/phy.git
       - spikeinterface
+      - kilosort
