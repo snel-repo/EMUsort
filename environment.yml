@@ -1,14 +1,15 @@
 ---
-name: emu
+name: emusort
 channels:
   - conda-forge
-  #- nvidia/label/cuda-11.3.1
   - pytorch
+  - nvidia
 dependencies:
-  #- cuda-nvcc
-  - cudatoolkit-dev=11.6
+  - cudatoolkit=11.6
+  - cuda-version=11.6
   - cupy
   - cython
+  - dask
   - h5py
   - joblib
   - matplotlib
@@ -27,7 +28,8 @@ dependencies:
   - pyqtwebengine
   - pytest
   - python=3.10
-  - pytorch=1.13
+  - pytorch-gpu=1.13
+  - pytorch-cuda=11.6
   - pywavelets
   - pyyaml
   - qtconsole
@@ -47,4 +49,4 @@ dependencies:
   - pip:
       - git+https://github.com/cortex-lab/phy.git
       - spikeinterface
-      - kilosort
+      - -e ./sorting/Kilosort4

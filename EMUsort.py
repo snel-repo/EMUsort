@@ -1,5 +1,6 @@
 from datetime import datetime
 
+# start clock as soon as possible, before other imports
 # calculate time taken to run each pipeline call
 start_time = datetime.now()
 
@@ -21,6 +22,17 @@ from sklearn.model_selection import ParameterGrid
 from sorting.Kilosort4.kilosort import run_kilosort
 
 
+def read_file(file):
+    with open(file, "rb") as f:
+        return f.read()
+
+
+def create_config(repo_folder, session_folder):
+    shutil.copyfile(
+        repo_folder + "/config_template.yaml", session_folder + "/config.yaml"
+    )
+
+
 def strfdelta(tdelta, fmt):
     d = {"days": tdelta.days}
     d["hours"], rem = divmod(tdelta.seconds, 3600)
@@ -40,9 +52,99 @@ def find(pattern, path, recursive=True, exact=False):
     return result
 
 
-def create_config(repo_folder, session_folder):
-    shutil.copyfile(
-        repo_folder + "/config_template.yaml", session_folder + "/config.yaml"
+def concatenate_emg_data(open_ephys_data_folder, recordings_to_concatenate):
+    def find_folders_with_prefix(folder, prefix):
+        return [
+            os.path.join(folder, subfolder)
+            for subfolder in os.listdir(folder)
+            if subfolder.startswith(prefix)
+            and os.path.isdir(os.path.join(folder, subfolder))
+        ]
+
+    record_node_folders = find_folders_with_prefix(
+        open_ephys_data_folder, "Record Node"
+    )
+
+    if len(record_node_folders) != 1:
+        raise ValueError(
+            "Expected one 'Record Node' folder, found:", len(record_node_folders)
+        )
+
+    record_node_folder = record_node_folders[0]
+    experiment_folders = find_folders_with_prefix(record_node_folder, "experiment")
+
+    if len(experiment_folders) != 1:
+        raise ValueError(
+            "Expected one 'experiment' folder, found:", len(experiment_folders)
+        )
+
+    experiment_folder = experiment_folders[0]
+    recording_folders = [
+        os.path.join(experiment_folder, recording_folder)
+        for recording_folder in os.listdir(experiment_folder)
+        if os.path.isdir(os.path.join(experiment_folder, recording_folder))
+        and recording_folder not in [".", "..", "concatenated_data"]
+    ]
+
+    continuous_files = []
+    for recording_folder in recording_folders:
+        continuous_path_1 = os.path.join(
+            recording_folder, "continuous", "Acquisition_Board-100.Rhythm Data"
+        )
+        continuous_path_2 = os.path.join(
+            recording_folder, "continuous", "Rhythm_FPGA-100.0"
+        )
+        if os.path.isdir(continuous_path_1):
+            continuous_files.append(os.path.join(continuous_path_1, "continuous.dat"))
+        elif os.path.isdir(continuous_path_2):
+            continuous_files.append(os.path.join(continuous_path_2, "continuous.dat"))
+        else:
+            raise FileNotFoundError(
+                f"Neither folder {continuous_path_1} or {continuous_path_2} exists."
+            )
+
+    output_data = bytearray()
+
+    for index in recordings_to_concatenate:
+        found = False
+        for recording_folder in recording_folders:
+            trailing_digits = "".join(
+                filter(str.isdigit, recording_folder.split(os.sep)[-1])
+            )
+            if str(index) == trailing_digits:
+                found = True
+                with open(
+                    continuous_files[recording_folders.index(recording_folder)], "rb"
+                ) as file:
+                    print(
+                        f"Reading {continuous_files[recording_folders.index(recording_folder)]}"
+                    )
+                    output_data += file.read()
+                break
+        if not found:
+            raise ValueError(f"Recording {index} does not exist.")
+
+    rhythm_folder_name = continuous_files[-1].split("/")[-2]
+    concatenated_data_dir = os.path.join(
+        experiment_folder,
+        "concatenated_data",
+        ",".join(map(str, recordings_to_concatenate)),
+    )
+    continuous_folder = os.path.join(
+        concatenated_data_dir, "continuous", rhythm_folder_name
+    )
+    os.makedirs(continuous_folder, exist_ok=True)
+
+    with open(os.path.join(continuous_folder, "continuous.dat"), "wb") as file:
+        file.write(output_data)
+
+    last_recording_folder = os.path.join(experiment_folder, recording_folders[-1])
+    structure_oebin = os.path.join(last_recording_folder, "structure.oebin")
+    if os.path.exists(structure_oebin):
+        shutil.copy(structure_oebin, concatenated_data_dir)
+
+    print(
+        f"Data from {len(recordings_to_concatenate)} files concatenated together and saved in {continuous_folder}"
     )
 
 
@@ -513,9 +615,9 @@ if full_config["concatenate_recordings"]:
                 else:
                     continuous_dat_is_present = False
             else:
-                raise SystemExit(
-                    f"There should be exactly one '*Rhythm*' folder in {continuous_folder} folder"
-                    f"concatenated data, but found {len(rhythm_folder)}\n"
+                raise FileNotFoundError(
+                    f"There should be exactly one '*Rhythm*' folder in {continuous_folder},"
+                    f" but found {len(rhythm_folder)}\n"
                     f"{rhythm_folder}"
                 )
         else:
@@ -527,19 +629,23 @@ if full_config["concatenate_recordings"]:
         print(
             "Concatenated files not found, concatenating data from data in chosen recording folders"
         )
-        path_to_add = repo_folder + "/sorting/emg/"
-        subprocess.run(
-            [
-                f"{matlab_root}",
-                "-nodesktop",
-                "-nodisplay",
-                "-nosplash",
-                "-r",
-                "rehash toolboxcache; restoredefaultpath;"
-                f"addpath(genpath('{path_to_add}')); concatenate_recordings('{full_config['emg_data_folder']}', {{{full_config['emg_recordings']}}})",
-            ],
-            check=True,
+        # path_to_add = repo_folder + "/sorting/emg/"
+        # subprocess.run(
+        #     [
+        #         f"{matlab_root}",
+        #         "-nodesktop",
+        #         "-nodisplay",
+        #         "-nosplash",
+        #         "-r",
+        #         "rehash toolboxcache; restoredefaultpath;"
+        #         f"addpath(genpath('{path_to_add}')); concatenate_recordings('{full_config['emg_data_folder']}', {{{full_config['emg_recordings']}}})",
+        #     ],
+        #     check=True,
+        # )
+        concatenate_emg_data(
+            full_config["working_folder"], full_config["emg_recordings"]
         )
+        # find the newly concatenated_data folder
         concatDataPath = find("concatenated_data", recordNodePath[0])
         assert (
             len(concatDataPath) == 1
