@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from pdb import set_trace
 from typing import List, Union
 
 import matplotlib.pyplot as plt
@@ -93,15 +94,13 @@ def strfdelta(tdelta: datetime, fmt: str) -> str:
 
 
 def dicts_match(dict1, dict2):
-    assert isinstance(dict1, dict) and isinstance(dict2, dict), "Inputs must be dictionaries"
     # Base case: if both inputs are not dictionaries, compare them directly
-    # if not isinstance(dict1, dict) or not isinstance(dict2, dict):
-    #     return dict1 == dict2
+    if not isinstance(dict1, dict) or not isinstance(dict2, dict):
+        return dict1 == dict2
 
     # Sort items of both dictionaries
     sorted_items1 = sorted(dict1.items())
     sorted_items2 = sorted(dict2.items())
-
     # Check if the sorted items are equal
     if sorted_items1 != sorted_items2:
         return False
@@ -195,9 +194,24 @@ def preprocess_ephys_data(
     Returns:
     - si.ChannelSliceRecording: The preprocessed ChannelSliceRecording object.
     """
+    # check which recordings to use and whether to call concatenate_emg_data
+    if this_config["Data"]["emg_recordings"][0] == "all":
+        emg_recordings_to_use = np.arange(recording_obj.get_num_segments())
+    else:
+        emg_recordings_to_use = np.array(this_config["Data"]["emg_recordings"])
+    if len(emg_recordings_to_use) > 1:
+        loaded_recording = concatenate_emg_data(
+            this_config["Data"]["session_folder"],
+            emg_recordings_to_use,
+            recording_obj,
+            this_config,
+        )
+    else:
+        loaded_recording = recording_obj.select_segments(emg_recordings_to_use)
+    
     # Apply bandpass filter to the EMG data
     recording_filtered = spre.bandpass_filter(
-        recording_obj,
+        loaded_recording,
         freq_min=this_config["Data"]["emg_passband"][0],
         freq_max=this_config["Data"]["emg_passband"][1],
     )
@@ -222,17 +236,22 @@ def preprocess_ephys_data(
         )
     else:
         print("Bad Channels:\n" + str(bad_channel_ids))
-        recording_filtered = recording_filtered.remove_channels(remove_bad_emg_chans)
+        recording_filtered = recording_filtered.channel_slice(np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids))
+        # recording_filtered = recording_filtered.remove_channels(bad_channel_ids)
     # # Apply common reference to the EMG data
     # recording_filtered = spre.common_reference(recording_filtered)
     # Apply notch filter to the EMG data
     recording_notch = spre.notch_filter(
         recording_filtered, freq=60, q=30
     )  # Apply notch filter at 60 Hz
+    
+    # set a probe for the recording
+    probe = create_probe(recording_notch)
+    preprocessed_recording = recording_notch.set_probe(probe)
     # align channels to maximize the correlation between channels
     # recording_notch = spre.align_snippets(recording_notch)
 
-    return recording_notch
+    return preprocessed_recording
 
 
 def concatenate_emg_data(
@@ -275,14 +294,13 @@ def concatenate_emg_data(
                 except TypeError as e:
                     print("Error loading previous configuration file or it is empty.")
                     previous_config_dict = {}
-            this_config_dict = dict(this_config)  # Cast to dictionary
+            this_config_dict = path_to_str_recursive(dict(this_config))  # Cast to dictionary
             if not dicts_match(previous_config_dict, this_config_dict):
-                import pdb; pdb.set_trace()
                 print("Configuration file has changed since last run, re-running concatenation...")
                 recording_concatenated = concat_and_save(concat_data_path)
                 dump_yaml(concat_data_path, this_config)
             else:
-                print("Configuration file has not changed since last run...")
+                print("Configuration file has not changed since last run, will load previous concatenated data...")
                 try:
                     recording_concatenated = si.load_extractor(concat_data_path)
                     return recording_concatenated
@@ -301,30 +319,15 @@ def concatenate_emg_data(
 
 
 
-def run_KS_sorting(iParams, this_config, recording_obj):
+def run_KS_sorting(iParams, this_config, loaded_recording):
     # update the KS parameters in the config file using the iParams values
     this_config["KS"]["Th_learned"] = iParams["Th"][0]
     this_config["KS"]["Th_universal"] = iParams["Th"][1]
     this_config["KS"]["Th_single_ch"] = iParams["spkTh"][0]
-
-    # check which recordings to use and whether to call concatenate_emg_data
-    if this_config["Data"]["emg_recordings"][0] == "all":
-        emg_recordings_to_use = np.arange(recording_obj.get_num_segments())
-    else:
-        emg_recordings_to_use = np.array(this_config["Data"]["emg_recordings"])
-    if len(emg_recordings_to_use) > 1:
-        loaded_recording = concatenate_emg_data(
-            this_config["Data"]["session_folder"],
-            emg_recordings_to_use,
-            recording_obj,
-            this_config,
-        )
-    else:
-        loaded_recording = recording_obj.select_segments(emg_recordings_to_use)
-
-    # set a probe for the recording
-    probe = create_probe(loaded_recording)
-    loaded_recording = loaded_recording.set_probe(probe)
+    this_config["num_chans"] = recording.get_num_channels()
+    this_config["KS"]["nearest_chans"] = this_config["num_chans"]
+    
+    # this_config["Group"]["emg_chan_list"] = np.arange(this_config["num_chans"])
     # loaded_recording.set_channel_locations(probe.contact_positions)
 
     # Run spike sorting
@@ -336,25 +339,23 @@ def run_KS_sorting(iParams, this_config, recording_obj):
     )
     # Save sorting results by exporting to Phy format
     waveforms_folder = Path(this_config["Data"]["sorted_folder"]).joinpath("waveforms")
-    phy_folder = Path(this_config["Data"]["sorted_folder"]).joinpath("phy_results")
+    phy_folder = Path(this_config["Data"]["sorted_folder"]).joinpath("phy")
     try:
         we = si.extract_waveforms(loaded_recording, sorting, waveforms_folder)
     except ValueError as e:
         print("Error extracting waveforms:", e)
         import spikeinterface.curation as scur
 
-        loaded_recording = scur.remove_excess_spikes(sorting, loaded_recording)
+        remove_excess_spikes_recording = scur.remove_excess_spikes(sorting, loaded_recording)
 
-        loaded_recording.set_probe(probe)
-        we = si.extract_waveforms(loaded_recording, sorting, waveforms_folder)
+        # loaded_recording.set_probe(probe)
+        we = si.extract_waveforms(remove_excess_spikes_recording, sorting, waveforms_folder)
 
-    export_to_phy(we, output_folder=phy_folder)
+    export_to_phy(we, output_folder=phy_folder, copy_binary=True, use_relative_path=True)
     # move results into file folder for storage
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
     final_filename = f'{str(this_config["Data"]["sorted_folder"])}_{time_stamp_us}'
-    os.mkdir(final_filename)
-    shutil.move(this_config["Data"]["sorted_folder"], final_filename)
-
+    shutil.copytree(this_config["Data"]["sorted_folder"], final_filename)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -386,7 +387,7 @@ if __name__ == "__main__":
         print("WARNING: Configuration file not found, generating a new one...")
         # Generate or update the configuration file
         config_file = Path(args.folder).joinpath("emu_config.yaml")
-        # if the config doesn't exist, load the default from the repo folder
+        # if the config doesn't exist, load the config template from the repo folder and KS defaults
         if not config_file.exists():
             create_config(Path(__file__).parent, Path(args.folder))
             # insert the KS parameters into the config file, under the section "KS"
@@ -469,6 +470,7 @@ if __name__ == "__main__":
         {
             "nblocks": int(0),
             "nearest_chans": len(full_config["Group"]["emg_chan_list"][0]),
+            "do_correction": False,
         }
     )
 
@@ -478,7 +480,10 @@ if __name__ == "__main__":
     )
     # TODO: Preprocess EMG data
     recording = preprocess_ephys_data(recording, full_config)
-
+    # update probe
+    # probe = create_probe(recording)
+    # recording.set_probe(probe)
+    
     # Setting GPU Environment Variables
     GPU_str = ",".join([str(i) for i in full_config["Sorting"]["GPU_to_use"]])
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -554,7 +559,7 @@ if __name__ == "__main__":
                 if Path(this_config["Data"]["sorted_folder"]).exists():
                     shutil.rmtree(
                         this_config["Data"]["sorted_folder"], ignore_errors=True
-                    )
+                    )     
                 run_KS_sorting(iParams[0], this_config, recording)  # run single job
 
     # Print status and time elapsed

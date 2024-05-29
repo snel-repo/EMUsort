@@ -40,8 +40,10 @@ dependencies:
   - pip:
       - ephyviewer
       - MEArec
+      # - git+https://github.com/SpikeInterface/spikeinterface.git@0.100.6
       - spikeinterface[full,widgets]
       - spikeinterface-gui
       - tridesclous
+      # - git+https://github.com/MouseLand/Kilosort.git@v4.0.7
       - -e ./sorting/Kilosort4
       - git+https://github.com/cortex-lab/phy.git
