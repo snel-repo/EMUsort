@@ -5,8 +5,8 @@ channels:
   - pytorch
   - nvidia
 dependencies:
-  - cudatoolkit=11.6
-  - cuda-version=11.6
+  - cuda-toolkit=12.1
+  - cuda-version=12.1
   - cupy
   - cython
   - dask
@@ -28,8 +28,8 @@ dependencies:
   - pyqtwebengine
   - pytest
   - python=3.10
-  - pytorch-gpu=1.13
-  - pytorch-cuda=11.6
+  - pytorch-gpu
+  - pytorch-cuda=12.1
   - pywavelets
   - pyyaml
   - qtconsole

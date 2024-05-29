@@ -1,7 +1,8 @@
 # this file will run kilosort according to my settings
 # import numpy as np
 from pathlib import Path
-from kilosort import run_kilosort
+
+from Kilosort4.kilosort import run_kilosort
 
 if __name__ == "__main__":
     run_kilosort(
@@ -14,7 +15,7 @@ if __name__ == "__main__":
             Th_learned=8,
             Th_single_ch=6,
             probe_path=Path(
-                "/snel/home/smoconn/git/EMUsort/geometries/linear_08ch_sequential_kilosortChanMap_2um.mat"
+                "/home/sean/git/EMUsort/channel_maps/linear_08ch_sequential_kilosortChanMap_2um.mat"
             ),
         ),
         filename=Path(

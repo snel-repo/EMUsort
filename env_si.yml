@@ -1,0 +1,39 @@
+---
+name: si
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - cxx-compiler
+  - h5py
+  - hdbscan
+  - htop
+  - ipympl
+  - ipywidgets
+  - joblib
+  - jupyter
+  - libxcb
+  - loky
+  - matplotlib
+  - networkx
+  - numba
+  - numpy
+  - pandas
+  - pip
+  - pybind11
+  - pyqt=5
+  - pyqtgraph
+  - python=3.12
+  - ruamel.yaml
+  - scikit-learn
+  - scipy
+  - tqdm
+  - xarray
+  - zarr
+  - pip:
+      - ephyviewer
+      - MEArec
+      - spikeinterface[full,widgets]
+      - spikeinterface-gui
+      - tridesclous
+      - git+https://github.com/cortex-lab/phy.git

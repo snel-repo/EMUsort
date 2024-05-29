@@ -1,0 +1,90 @@
+---
+# Configuration file
+# Auto-generated parameters
+Data:
+    # path to repo and EMUsort.py script (always overwritten by program)
+    repo_folder:
+    # path to session folder (must be provided in command line)
+    session_folder:
+    # path to working folder, for sort storage (should end in '_emg', then it will be auto-populated)
+    working_folder:
+    # specify recordings to process (can be [all] or a list of integers, e.g., [1,2,5,6])
+    # if more than one is provided, they will be concatenated prior to recording
+    emg_recordings: [1]
+    # set bandpass filter settings for emg data
+    emg_passband:
+        - 250
+        - 5000
+    # set bandpass filter settings for emg data
+    emg_sampling_rate: 30000
+    time_range: # can be used to slice along time, set start and end to 0 to use all data
+        - 0
+        - 0
+# Sorting parameters
+Sorting:
+    # GPU to use for kilosort, (a list of integers, e.g., [1,2,5,6])
+    GPU_to_use: [0]
+    # number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
+    # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is True
+    num_KS_jobs: 1
+    do_KS_param_gridsearch: False
+    gridsearch_params: # 
+        Th: # in format [Th_learned, Th_universal] for each element
+            - [9, 8]
+            - [10, 4]
+            - [7, 3]
+            - [5, 2]
+            - [2, 1]
+        spkTh: # Th_single_ch
+            - [6]
+            - [3]
+            - [9]
+            # - [-3, -6]
+            # - [-6, -9]
+# Group-specific parameters (Groups are sorted separately)
+Group:
+    emg_chan_map_file: # List of strings, each string is the channel map filename in /geometries 
+        - linear_08ch_sequential_kilosortChanMap_2um.mat
+    emg_chan_list: # List of channels to sort, zero-indexed
+        - [0,1,2,3,4,5,6,7]
+    emg_analog_chan: 9 # index for the analog channel in the emg data (optional)
+    remove_bad_emg_chans: # methods are mad, std, and coherence+psd, True defaults to mad
+        - False
+    remove_channel_delays:
+        - False
+
+KS: # section where internal Kilosort settings are stored
+    Th_learned: 8
+    Th_single_ch: 6
+    Th_universal: 9
+    acg_threshold: 0.2
+    artifact_threshold: None
+    batch_size: 60000
+    binning_depth: 5
+    ccg_threshold: 0.25
+    cluster_downsampling: 20
+    cluster_pcs: 64
+    dmin: None
+    dminx: 32
+    do_CAR: True
+    do_correction: True
+    duplicate_spike_bins: 15
+    invert_sign: False
+    keep_good_only: False
+    min_template_size: 10
+    n_pcs: 6
+    n_templates: 6
+    nblocks: 0
+    nearest_chans: 8
+    nearest_templates: 100
+    nskip: 25
+    nt: 61
+    nt0min: None
+    save_extra_kwargs: False
+    scaleproc: None
+    sig_interp: 20
+    skip_kilosort_preprocessing: False
+    template_sizes: 5
+    templates_from_data: True
+    torch_device: 'auto'
+    whitening_range: 32

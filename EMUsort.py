@@ -4,7 +4,6 @@ from datetime import datetime
 # calculate time taken to run each pipeline call
 start_time = datetime.now()
 
-import concurrent.futures
 import glob
 import itertools
 import os
@@ -12,6 +11,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+# import concurrent.futures
+from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
@@ -163,8 +164,8 @@ def run_KS_sorting(iParams, worker_id, full_config, this_config):
     )
     worker_id = str(worker_id)
     with tempfile.TemporaryDirectory(suffix=f"_worker{worker_id}") as worker_folder:
+        # loop until exhaustion of iterator
         while True:
-            # while no exhaustion of iterator
             try:
                 these_params = next(iParams)
                 if (
@@ -250,7 +251,7 @@ def run_KS_sorting(iParams, worker_id, full_config, this_config):
                 # sum the 1's in the good field of ops.mat to get number of good units
                 # num_good_units = str(sum(rez["good"])[0])
                 brokenChan = loadmat(f"{save_path}/brokenChan.mat")["brokenChan"]
-                goodChans = np.setdiff1d(np.arange(1, 17), brokenChan)
+                # goodChans = np.setdiff1d(np.arange(1, 17), brokenChan)
                 # goodChans_str = ",".join(str(i) for i in goodChans)
 
                 ## TEMP - remove this later: append git branch name to final_filename
@@ -268,7 +269,7 @@ def run_KS_sorting(iParams, worker_id, full_config, this_config):
                     " ", ""
                 )
                 final_filename = (
-                    f"sorted{str(iGroup)}"
+                    f"sorted{str(worker_id)}"
                     f"_{time_stamp_us}"
                     f"_rec-{recordings_str}"
                     # f"_chans-{goodChans_str}"
@@ -710,7 +711,7 @@ if sort:
     path_to_add = repo_folder + "/sorting/"
     for iGroup in range(len(full_config["Group"]["emg_chan_list"])):
         if full_config["concatenate_recordings"]:
-            this_config["emg_data_folder"] = concatDataPath
+            full_config["emg_data_folder"] = concatDataPath
         else:
             # find match to recording folder using recordings_str
             recordNodePath = find(
@@ -720,32 +721,29 @@ if sort:
                 len(recordNodePath) == 1
             ), "Please remove all but one 'Record Node ###' folder in the Open Ephys data folder"
             f = find("recording" + recordings_str, recordNodePath[0])
-            this_config["emg_data_folder"] = str(f[0])
-        print(f"Using data from: {this_config['emg_data_folder']}")
-        this_config["sorted_folder"] = str(
-            this_config["working_folder"] + "/sorted" + str(iGroup)
-        )
-        this_config["sort_group"] = iGroup
-        this_config["emg_chan_map_file"] = os.path.join(
+            full_config["emg_data_folder"] = str(f[0])
+        print(f"Using data from: {full_config['emg_data_folder']}")
+        full_config["sort_group"] = iGroup
+        full_config["emg_chan_map_file"] = os.path.join(
             full_config["repo_folder"],
             "channel_maps",
             full_config["Group"]["emg_chan_map_file"][iGroup],
         )
-        this_config["chans"] = np.array(full_config["Group"]["emg_chan_list"][iGroup])
-        this_config["remove_bad_emg_chans"] = np.array(
+        full_config["chans"] = np.array(full_config["Group"]["emg_chan_list"][iGroup])
+        full_config["remove_bad_emg_chans"] = np.array(
             full_config["Group"]["remove_bad_emg_chans"][iGroup]
         )
-        this_config["remove_channel_delays"] = np.array(
+        full_config["remove_channel_delays"] = np.array(
             full_config["Group"]["remove_channel_delays"][iGroup]
         )
-        this_config["num_chans"] = (
+        full_config["num_chans"] = (
             full_config["Group"]["emg_chan_list"][iGroup][1]
             - full_config["Group"]["emg_chan_list"][iGroup][0]
             + 1
         )
         # need this line so ETL_emg_binary can access the config file
-        savemat(f"{full_config['repo_folder']}/tmp/config.mat", this_config)
-        shutil.rmtree(this_config["sorted_folder"], ignore_errors=True)
+        savemat(f"{full_config['repo_folder']}/tmp/config.mat", full_config)
+        shutil.rmtree(full_config["sorted_folder"], ignore_errors=True)
         subprocess.run(
             [
                 f"{matlab_root}",
@@ -760,11 +758,11 @@ if sort:
             ],
             check=True,
         )
-        this_config["emg_binary_filename"] = str(
-            Path(this_config["sorted_folder"]).joinpath("data.bin")
+        full_config["emg_binary_filename"] = str(
+            Path(full_config["sorted_folder"]).joinpath("data.bin")
         )
         # finally save the config file with the new emg_binary_filename (output of ETL_emg_binary)
-        savemat(f"{full_config['repo_folder']}/tmp/config.mat", this_config)
+        savemat(f"{full_config['repo_folder']}/tmp/config.mat", full_config)
 
         # check if user wants to do grid search of KS params
         # if full_config["Sorting"]["do_KS_param_gridsearch"] == 1:
@@ -794,27 +792,43 @@ if sort:
                 full_config["Sorting"]["do_KS_param_gridsearch"] == 1
             ), "Parallel jobs can only be used when do_KS_param_gridsearch is set to True"
             # create new folder for each parallel job to store results temporarily
+            these_configs = []
             for i in worker_ids:
                 # create new folder for each parallel job
                 zfill_amount = len(str(full_config["Sorting"]["num_KS_jobs"]))
-                new_sorted_folder = this_config["sorted_folder"] + str(i).zfill(
+                new_sorted_folder = full_config["sorted_folder"] + str(i).zfill(
                     zfill_amount
                 )
                 if os.path.isdir(new_sorted_folder):
                     shutil.rmtree(new_sorted_folder, ignore_errors=True)
-                shutil.copytree(this_config["sorted_folder"], new_sorted_folder)
+                shutil.copytree(full_config["sorted_folder"], new_sorted_folder)
+                # create a new config file for each parallel job
+                this_config = full_config.copy()
+                this_config["sorted_folder"] = new_sorted_folder
+                these_configs.append(this_config)
             # split iParams according to number of parallel jobs
             iParams_split = np.array_split(
                 iParams, full_config["Sorting"]["num_KS_jobs"]
             )
             # run parallel jobs
-            with concurrent.futures.ProcessPoolExecutor() as executor:
-                executor.map(
+            # with concurrent.futures.ProcessPoolExecutor() as executor:
+            #     executor.map(
+            #         run_KS_sorting,
+            #         iParams_split,
+            #         worker_ids,
+            #         full_config["Sorting"]["num_KS_jobs"] * [full_config],
+            #         full_config["Sorting"]["num_KS_jobs"] * [this_config],
+            #     )
+            # replace the above with multiprocessing
+            with Pool(full_config["Sorting"]["num_KS_jobs"]) as pool:
+                pool.starmap(
                     run_KS_sorting,
-                    iParams_split,
-                    worker_ids,
-                    full_config["Sorting"]["num_KS_jobs"] * [full_config],
-                    full_config["Sorting"]["num_KS_jobs"] * [this_config],
+                    zip(
+                        iParams_split,
+                        worker_ids,
+                        full_config["Sorting"]["num_KS_jobs"] * [full_config],
+                        these_configs,
+                    ),
                 )
         else:
             worker_id = 0  # scalar for single job

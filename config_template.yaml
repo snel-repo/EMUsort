@@ -6,7 +6,7 @@
 repo_folder:
 # path to session folder (must be provided in command line)
 session_folder:
-# path to working folder, for sort stor (should end in '_emg', then it will be auto-populated)
+# path to working folder, for sort storage (should end in '_emg', then it will be auto-populated)
 working_folder:
 # specify recordings to process (can be [all] or a list of integers, e.g., [1,2,5,6])
 emg_recordings: [1]
