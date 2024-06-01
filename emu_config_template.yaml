@@ -3,11 +3,11 @@
 # Auto-generated parameters
 Data:
     # path to repo and EMUsort.py script (always overwritten by program)
-    repo_folder:
+    # repo_folder:
     # path to session folder (must be provided in command line)
-    session_folder:
+    # session_folder:
     # path to working folder, for sort storage (should end in '_emg', then it will be auto-populated)
-    working_folder:
+    # working_folder:
     # specify recordings to process (can be [all] or a list of integers, e.g., [1,2,5,6])
     # if more than one is provided, they will be concatenated prior to recording
     emg_recordings: [1]
@@ -58,16 +58,16 @@ KS: # section where internal Kilosort settings are stored
     Th_single_ch: 6
     Th_universal: 9
     acg_threshold: 0.2
-    artifact_threshold: None
+    artifact_threshold: 
     batch_size: 60000
     binning_depth: 5
     ccg_threshold: 0.25
     cluster_downsampling: 20
     cluster_pcs: 64
-    dmin: None
+    dmin: 
     dminx: 32
-    do_CAR: True
-    do_correction: True
+    do_CAR: False
+    do_correction: False
     duplicate_spike_bins: 15
     invert_sign: False
     keep_good_only: False
@@ -79,9 +79,9 @@ KS: # section where internal Kilosort settings are stored
     nearest_templates: 100
     nskip: 25
     nt: 61
-    nt0min: None
+    nt0min: 
     save_extra_kwargs: False
-    scaleproc: None
+    scaleproc: 
     sig_interp: 20
     skip_kilosort_preprocessing: False
     template_sizes: 5

@@ -93,6 +93,13 @@ def strfdelta(tdelta: datetime, fmt: str) -> str:
     return fmt.format(**d)
 
 
+def dump_yaml(dump_path: Path, this_config: dict):
+    # convert Path objects to strings before saving
+    this_config = path_to_str_recursive(this_config)
+    with open(dump_path, "w") as f:
+        yaml.dump(this_config, f)
+
+
 def dicts_match(dict1, dict2):
     # Base case: if both inputs are not dictionaries, compare them directly
     if not isinstance(dict1, dict) or not isinstance(dict2, dict):
@@ -113,6 +120,7 @@ def dicts_match(dict1, dict2):
     # If all checks pass, the dictionaries are equal
     return True
 
+
 def path_to_str_recursive(data):
     if isinstance(data, Path):
         return str(data)
@@ -122,6 +130,7 @@ def path_to_str_recursive(data):
         return [path_to_str_recursive(item) for item in data]
     else:
         return data
+
 
 def find(
     pattern: str, path: Union[Path, str], recursive: bool = True, exact: bool = False
@@ -208,7 +217,7 @@ def preprocess_ephys_data(
         )
     else:
         loaded_recording = recording_obj.select_segments(emg_recordings_to_use)
-    
+
     # Apply bandpass filter to the EMG data
     recording_filtered = spre.bandpass_filter(
         loaded_recording,
@@ -236,7 +245,9 @@ def preprocess_ephys_data(
         )
     else:
         print("Bad Channels:\n" + str(bad_channel_ids))
-        recording_filtered = recording_filtered.channel_slice(np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids))
+        recording_filtered = recording_filtered.channel_slice(
+            np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids)
+        )
         # recording_filtered = recording_filtered.remove_channels(bad_channel_ids)
     # # Apply common reference to the EMG data
     # recording_filtered = spre.common_reference(recording_filtered)
@@ -244,7 +255,7 @@ def preprocess_ephys_data(
     recording_notch = spre.notch_filter(
         recording_filtered, freq=60, q=30
     )  # Apply notch filter at 60 Hz
-    
+
     # set a probe for the recording
     probe = create_probe(recording_notch)
     preprocessed_recording = recording_notch.set_probe(probe)
@@ -272,51 +283,54 @@ def concatenate_emg_data(
             format="binary", folder=concat_data_path, overwrite=True
         )
         return recording_concatenated
-    
-    def dump_yaml(concat_data_path: Path, this_config: dict):
-        # convert Path objects to strings before saving
-        this_config = path_to_str_recursive(this_config)
-        with open(concat_data_path.joinpath("config_file.yaml"), 'w') as f:
-                    yaml.dump(this_config, f)
-    
+
     session_folder = Path(session_folder)
     concat_data_path = session_folder / "concatenated_data"
     yaml = YAML()
 
     concat_exists = concat_data_path.exists()
     if concat_exists:
-        previous_config_file_exists = concat_data_path.joinpath("config_file.yaml").exists()
-        if previous_config_file_exists:
-            with open(concat_data_path.joinpath("config_file.yaml")) as f:
+        last_config_file_exists = concat_data_path.joinpath("last_config.yaml").exists()
+        if last_config_file_exists:
+            with open(concat_data_path.joinpath("last_config.yaml")) as f:
                 try:
-                    previous_config = yaml.load(f)
-                    previous_config_dict = dict(previous_config)  # Cast to dictionary
+                    last_config = yaml.load(f)
+                    last_config_dict = dict(last_config)  # Cast to dictionary
                 except TypeError as e:
-                    print("Error loading previous configuration file or it is empty.")
-                    previous_config_dict = {}
-            this_config_dict = path_to_str_recursive(dict(this_config))  # Cast to dictionary
-            if not dicts_match(previous_config_dict, this_config_dict):
-                print("Configuration file has changed since last run, re-running concatenation...")
+                    print(
+                        "Error loading previous configuration file 'last_config.yaml' or it is empty."
+                    )
+                    last_config_dict = {}
+            this_config_dict = path_to_str_recursive(
+                dict(this_config)
+            )  # Cast to dictionary
+            if not dicts_match(last_config_dict, this_config_dict):
+                print(
+                    "Configuration file has changed since last run, re-running concatenation..."
+                )
                 recording_concatenated = concat_and_save(concat_data_path)
-                dump_yaml(concat_data_path, this_config)
+                dump_yaml(concat_data_path.joinpath("last_config.yaml"), this_config)
             else:
-                print("Configuration file has not changed since last run, will load previous concatenated data...")
+                print(
+                    "Configuration file has not changed since last run, will load previous concatenated data..."
+                )
                 try:
                     recording_concatenated = si.load_extractor(concat_data_path)
                     return recording_concatenated
                 except:
-                    print("Failed to load previously concatenated data, re-running concatenation...")
+                    print(
+                        "Failed to load previously concatenated data, re-running concatenation..."
+                    )
                     recording_concatenated = concat_and_save(concat_data_path)
         else:
-            dump_yaml(concat_data_path, this_config)
+            dump_yaml(concat_data_path.joinpath("last_config.yaml"), this_config)
     else:
         concat_data_path.mkdir(parents=True, exist_ok=True)
         print("Concatenated data folder created.")
-        dump_yaml(concat_data_path, this_config)
+        dump_yaml(concat_data_path.joinpath("last_config.yaml"), this_config)
         recording_concatenated = concat_and_save(concat_data_path)
 
     return recording_concatenated
-
 
 
 def run_KS_sorting(iParams, this_config, loaded_recording):
@@ -326,7 +340,7 @@ def run_KS_sorting(iParams, this_config, loaded_recording):
     this_config["KS"]["Th_single_ch"] = iParams["spkTh"][0]
     this_config["num_chans"] = recording.get_num_channels()
     this_config["KS"]["nearest_chans"] = this_config["num_chans"]
-    
+
     # this_config["Group"]["emg_chan_list"] = np.arange(this_config["num_chans"])
     # loaded_recording.set_channel_locations(probe.contact_positions)
 
@@ -346,16 +360,23 @@ def run_KS_sorting(iParams, this_config, loaded_recording):
         print("Error extracting waveforms:", e)
         import spikeinterface.curation as scur
 
-        remove_excess_spikes_recording = scur.remove_excess_spikes(sorting, loaded_recording)
+        remove_excess_spikes_recording = scur.remove_excess_spikes(
+            sorting, loaded_recording
+        )
 
         # loaded_recording.set_probe(probe)
-        we = si.extract_waveforms(remove_excess_spikes_recording, sorting, waveforms_folder)
+        we = si.extract_waveforms(
+            remove_excess_spikes_recording, sorting, waveforms_folder
+        )
 
-    export_to_phy(we, output_folder=phy_folder, copy_binary=True, use_relative_path=True)
+    export_to_phy(
+        we, output_folder=phy_folder, copy_binary=True, use_relative_path=True
+    )
     # move results into file folder for storage
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
     final_filename = f'{str(this_config["Data"]["sorted_folder"])}_{time_stamp_us}'
     shutil.copytree(this_config["Data"]["sorted_folder"], final_filename)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -370,28 +391,38 @@ if __name__ == "__main__":
         action="store_true",
         help="Generate or update the configuration file",
     )
+    parser.add_argument( # ability to reset the config file
+        "--reset-config",
+        action="store_true",
+        help="Reset the configuration file to the default template",
+    )
     parser.add_argument(
         "-s", "--sort", action="store_true", help="Perform spike sorting"
     )
 
     args = parser.parse_args()
 
-    # Generate or load config file
     yaml = YAML()
+    # Generate, reset, or load config file
     try:
+        if args.reset_config:
+            print("Configuration file will be reset to default template.")
+            create_config(Path(__file__).parent, Path(args.folder))
+            raise FileNotFoundError
         # Load config file
-        config_file = Path(args.folder).joinpath("emu_config.yaml")
-        with open(config_file) as f:
+        config_file_path = Path(args.folder).joinpath("emu_config.yaml")
+        with open(config_file_path) as f:
             full_config = yaml.load(f)
     except FileNotFoundError as e:
-        print("WARNING: Configuration file not found, generating a new one...")
+        if not args.reset_config:
+            print("WARNING: Configuration file not found, generating a new one...")
         # Generate or update the configuration file
-        config_file = Path(args.folder).joinpath("emu_config.yaml")
+        config_file_path = Path(args.folder).joinpath("emu_config.yaml")
         # if the config doesn't exist, load the config template from the repo folder and KS defaults
-        if not config_file.exists():
+        if not config_file_path.exists():
             create_config(Path(__file__).parent, Path(args.folder))
             # insert the KS parameters into the config file, under the section "KS"
-            with open(config_file, "r") as f:
+            with open(config_file_path, "r") as f:
                 full_config = yaml.load(f)
                 KS_config = (
                     ss.Kilosort4Sorter.default_params()
@@ -399,14 +430,14 @@ if __name__ == "__main__":
                 full_config["KS"] = (
                     KS_config  # insert the KS parameters into the config file
                 )
-            with open(config_file, "w") as f:
+            with open(config_file_path, "w") as f:
                 yaml.dump(full_config, f)
-            print(f"Configuration file saved at {config_file}")
+            print(f"Configuration file saved at {config_file_path}")
 
     # open text editor to edit the configuration file if desired
     if args.config:
-        subprocess.run(["nano", config_file])
-        full_config = yaml.load(config_file)
+        subprocess.run(["nano", config_file_path])
+    full_config = yaml.load(config_file_path)
 
     # Prepare common configuration file
     # full_config.update(
@@ -474,23 +505,24 @@ if __name__ == "__main__":
         }
     )
 
-    # load data from the session folder
-    recording = load_ephys_data(
-        full_config["Data"]["session_folder"], full_config["Group"]["emg_chan_list"][0]
-    )
-    # TODO: Preprocess EMG data
-    recording = preprocess_ephys_data(recording, full_config)
-    # update probe
-    # probe = create_probe(recording)
-    # recording.set_probe(probe)
-    
-    # Setting GPU Environment Variables
-    GPU_str = ",".join([str(i) for i in full_config["Sorting"]["GPU_to_use"]])
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = GPU_str
-
     # EMG Preprocessing and Spike Sorting
     if args.sort:
+
+        # load data from the session folder
+        recording = load_ephys_data(
+            full_config["Data"]["session_folder"],
+            full_config["Group"]["emg_chan_list"][0],
+        )
+        # TODO: Preprocess EMG data
+        recording = preprocess_ephys_data(recording, full_config)
+        # update probe
+        # probe = create_probe(recording)
+        # recording.set_probe(probe)
+
+        # Setting GPU Environment Variables
+        GPU_str = ",".join([str(i) for i in full_config["Sorting"]["GPU_to_use"]])
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        os.environ["CUDA_VISIBLE_DEVICES"] = GPU_str
         full_config["Data"]["sorted_folder"] = (
             Path(full_config["Data"]["session_folder"]) / "sorted"
         )
@@ -559,7 +591,7 @@ if __name__ == "__main__":
                 if Path(this_config["Data"]["sorted_folder"]).exists():
                     shutil.rmtree(
                         this_config["Data"]["sorted_folder"], ignore_errors=True
-                    )     
+                    )
                 run_KS_sorting(iParams[0], this_config, recording)  # run single job
 
     # Print status and time elapsed
