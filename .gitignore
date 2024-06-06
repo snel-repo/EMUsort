@@ -2,3 +2,4 @@ tmp
 *.prof
 *.mexa64
 __pycache__
+.vscode

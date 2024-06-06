@@ -50,7 +50,7 @@ Group:
     emg_analog_chan: 9 # index for the analog channel in the emg data (optional)
     remove_bad_emg_chans: # methods are mad, std, and coherence+psd, True defaults to mad
         - False
-    remove_channel_delays:
+    remove_chan_delays:
         - False
 
 KS: # section where internal Kilosort settings are stored

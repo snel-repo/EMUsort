@@ -1,3 +1,10 @@
+import sys
+
+if sys.version_info < (3, 5):
+    sys.exit(
+        "Error: Your Python version is not supported. Please use Python 3.5 or later."
+    )
+
 from datetime import datetime
 
 start_time = datetime.now()  # include imports in time cost
@@ -10,23 +17,24 @@ from pathlib import Path
 from pdb import set_trace
 from typing import List, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import spikeinterface as si
-import spikeinterface.comparison as sc
-import spikeinterface.curation as scur
-import spikeinterface.exporters as sexp
 import spikeinterface.extractors as se
-import spikeinterface.postprocessing as spost
 import spikeinterface.preprocessing as spre
-import spikeinterface.qualitymetrics as sqm
 import spikeinterface.sorters as ss
-import spikeinterface.widgets as sw
-from probeinterface import Probe, get_probe
-from probeinterface.plotting import plot_probe
+from probeinterface import Probe  # , get_probe
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 from spikeinterface.exporters import export_to_phy
+
+# import spikeinterface.comparison as sc
+# import spikeinterface.curation as scur
+# import spikeinterface.exporters as sexp
+# import spikeinterface.postprocessing as spost
+# import spikeinterface.qualitymetrics as sqm
+# import spikeinterface.widgets as sw
+
+# from probeinterface.plotting import plot_probe
 
 
 def create_config(repo_folder: Union[Path, str], session_folder: Union[Path, str]):
@@ -337,7 +345,7 @@ def run_KS_sorting(iParams, this_config, loaded_recording):
     # update the KS parameters in the config file using the iParams values
     this_config["KS"]["Th_learned"] = iParams["Th"][0]
     this_config["KS"]["Th_universal"] = iParams["Th"][1]
-    this_config["KS"]["Th_single_ch"] = iParams["spkTh"][0]
+    this_config["KS"]["Th_single_ch"] = iParams["spkTh"]
     this_config["num_chans"] = recording.get_num_channels()
     this_config["KS"]["nearest_chans"] = this_config["num_chans"]
 
@@ -391,7 +399,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Generate or update the configuration file",
     )
-    parser.add_argument( # ability to reset the config file
+    parser.add_argument(  # ability to reset the config file
         "--reset-config",
         action="store_true",
         help="Reset the configuration file to the default template",
@@ -491,17 +499,20 @@ if __name__ == "__main__":
     #             np.array(bad_chans, dtype=int)
     #             for bad_chans in full_config["Group"]["remove_bad_emg_chans"]
     #         ],
-    #         "remove_channel_delays": [
+    #         "remove_chan_delays": [
     #             np.array(delays, dtype=int)
-    #             for delays in full_config["Group"]["remove_channel_delays"]
+    #             for delays in full_config["Group"]["remove_chan_delays"]
     #         ],
     #     }
     # )
+
+    # below are overrides to KS defaults which always improve performance with EMG data
     full_config["KS"].update(
         {
             "nblocks": int(0),
             "nearest_chans": len(full_config["Group"]["emg_chan_list"][0]),
             "do_correction": False,
+            "remove_chan_delays": full_config["Group"]["remove_chan_delays"][0],
         }
     )
 
