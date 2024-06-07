@@ -12,7 +12,9 @@ import argparse
 import os
 import shutil
 import subprocess
-from concurrent.futures import ProcessPoolExecutor
+from copy import deepcopy
+# from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import Pool
 from pathlib import Path
 from pdb import set_trace
 from typing import List, Union
@@ -341,35 +343,20 @@ def concatenate_emg_data(
     return recording_concatenated
 
 
-def run_KS_sorting(iParams, this_config, loaded_recording):
-    # update the KS parameters in the config file using the iParams values
-    this_config["KS"]["Th_learned"] = iParams["Th"][0]
-    this_config["KS"]["Th_universal"] = iParams["Th"][1]
-    this_config["KS"]["Th_single_ch"] = iParams["spkTh"]
-    this_config["num_chans"] = recording.get_num_channels()
-    this_config["KS"]["nearest_chans"] = this_config["num_chans"]
-
-    # this_config["Group"]["emg_chan_list"] = np.arange(this_config["num_chans"])
-    # loaded_recording.set_channel_locations(probe.contact_positions)
-
-    # Run spike sorting
-    sorting = ss.run_sorter(
-        sorter_name="kilosort4",
-        recording=loaded_recording,
-        output_folder=this_config["Data"]["sorted_folder"],
-        **this_config["KS"],
-    )
+def extract_sorting_result(sorting, ii):
     # Save sorting results by exporting to Phy format
-    waveforms_folder = Path(this_config["Data"]["sorted_folder"]).joinpath("waveforms")
-    phy_folder = Path(this_config["Data"]["sorted_folder"]).joinpath("phy")
+    waveforms_folder = Path(these_configs[ii]["Data"]["sorted_folder"]).joinpath(
+        "waveforms"
+    )
+    phy_folder = Path(these_configs[ii]["Data"]["sorted_folder"]).joinpath("phy")
     try:
-        we = si.extract_waveforms(loaded_recording, sorting, waveforms_folder)
+        we = si.extract_waveforms(job_list[ii]["recording"], sorting, waveforms_folder)
     except ValueError as e:
         print("Error extracting waveforms:", e)
         import spikeinterface.curation as scur
 
         remove_excess_spikes_recording = scur.remove_excess_spikes(
-            sorting, loaded_recording
+            sorting, job_list[ii]["recording"]
         )
 
         # loaded_recording.set_probe(probe)
@@ -382,8 +369,42 @@ def run_KS_sorting(iParams, this_config, loaded_recording):
     )
     # move results into file folder for storage
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
-    final_filename = f'{str(this_config["Data"]["sorted_folder"])}_{time_stamp_us}'
-    shutil.copytree(this_config["Data"]["sorted_folder"], final_filename)
+    Th_this_config = (
+        these_configs[ii]["KS"]["Th_learned"],
+        these_configs[ii]["KS"]["Th_universal"],
+        tuple(these_configs[ii]["KS"]["Th_single_ch"]),
+    )
+    params_suffix = f"Th_({Th_this_config[0]},{Th_this_config[1]},{Th_this_config[2]})"
+    final_filename = f'{str(Path(these_configs[ii]["Data"]["sorted_folder"]).parent/"sorted")}_{time_stamp_us}_{params_suffix}'
+    final_filename = final_filename.replace(
+        " ", ""
+    )  # remove whitespace from the filename
+    shutil.copytree(these_configs[ii]["Data"]["sorted_folder"], final_filename)
+
+
+def run_KS_sorting(job_list, these_configs):
+    # job_list is of structure:
+    # job_list = [
+    #     {
+    #         "sorter_name": "kilosort4",
+    #         "recording": recording_list[i],
+    #         "output_folder": these_configs[i]["Data"]["sorted_folder"],
+    #         **this_config["KS"],
+    # update the KS parameters in the config file using the iParams values
+
+    # this_config["Group"]["emg_chan_list"] = np.arange(this_config["num_chans"])
+    # loaded_recording.set_channel_locations(probe.contact_positions)
+
+    # Run spike sorting
+    sortings = ss.run_sorter_jobs(
+        job_list=job_list,
+        engine="joblib",
+        engine_kwargs={"n_jobs": these_configs[0]["Sorting"]["num_KS_jobs"]},
+        return_output=True,
+    )
+    # do this in parallel using Pool
+    with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
+        pool.starmap(extract_sorting_result, zip(sortings, range(len(sortings))))
 
 
 if __name__ == "__main__":
@@ -486,7 +507,7 @@ if __name__ == "__main__":
     #         "GPU_to_use": np.array(full_config["Sorting"]["GPU_to_use"], dtype=int),
     #         "num_KS_jobs": int(full_config["Sorting"]["num_KS_jobs"]),
     #         "do_KS_param_gridsearch": int(full_config["Sorting"]["do_KS_param_gridsearch"]),
-    #         "gridsearch_params": full_config["Sorting"]["gridsearch_params"],
+    #         "gridsearch_KS_params": full_config["Sorting"]["gridsearch_KS_params"],
     #     }
     # )
     # full_config["Group"].update(
@@ -512,7 +533,6 @@ if __name__ == "__main__":
             "nblocks": int(0),
             "nearest_chans": len(full_config["Group"]["emg_chan_list"][0]),
             "do_correction": False,
-            "remove_chan_delays": full_config["Group"]["remove_chan_delays"][0],
         }
     )
 
@@ -540,70 +560,129 @@ if __name__ == "__main__":
         for iGroup in range(len(full_config["Group"]["emg_chan_list"])):
             print(f"Recording information: {recording}")
             full_config["sort_group"] = iGroup
-            full_config["emg_chan_map_file"] = (
-                Path(full_config["Data"]["repo_folder"])
-                / "channel_maps"
-                / full_config["Group"]["emg_chan_map_file"][iGroup]
-            )
+            # full_config["emg_chan_map_file"] = (
+            #     Path(full_config["Data"]["repo_folder"])
+            #     / "channel_maps"
+            #     / full_config["Group"]["emg_chan_map_file"][iGroup]
+            # )
             full_config["num_chans"] = len(
                 full_config["Group"]["emg_chan_list"][iGroup]
             )
             iParams = list(
-                ParameterGrid(full_config["Sorting"]["gridsearch_params"])
+                ParameterGrid(full_config["Sorting"]["gridsearch_KS_params"])
             )  # get iterator of all possible param combinations
             if full_config["Sorting"]["do_KS_param_gridsearch"] == 0:
                 # grab the first element of the ParameterGrid iterator, which is the default dictionary
                 iParams = [iParams[0]]
 
             # create new folders if running in parallel
+            total_KS_jobs = len(iParams)
+            # if full_config["Sorting"]["num_KS_jobs"] > 1:
+            worker_ids = np.arange(total_KS_jobs)
+            # ensure proper configuration for parallel jobs
+            # assert full_config["Sorting"]["num_KS_jobs"] <= len(
+            #     full_config["Sorting"]["GPU_to_use"]
+            # ), "Number of parallel jobs must be less than or equal to number of GPUs"
             if full_config["Sorting"]["num_KS_jobs"] > 1:
-                worker_ids = np.arange(full_config["Sorting"]["num_KS_jobs"])
-                # ensure proper configuration for parallel jobs
-                assert full_config["Sorting"]["num_KS_jobs"] <= len(
-                    full_config["Sorting"]["GPU_to_use"]
-                ), "Number of parallel jobs must be less than or equal to number of GPUs"
                 assert (
                     full_config["Sorting"]["do_KS_param_gridsearch"] == 1
                 ), "Parallel jobs can only be used when do_KS_param_gridsearch is set to True"
-                # create new folder for each parallel job to store results temporarily
-                these_configs = []
-                for i in worker_ids:
-                    # create new folder for each parallel job
-                    zfill_amount = len(str(full_config["Sorting"]["num_KS_jobs"]))
-                    new_sorted_folder = full_config["Data"]["sorted_folder"].joinpath(
-                        str(i).zfill(zfill_amount)
-                    )
-                    if Path(new_sorted_folder).exists():
-                        shutil.rmtree(new_sorted_folder, ignore_errors=True)
-                    shutil.copytree(
-                        full_config["Data"]["sorted_folder"], new_sorted_folder
-                    )
-                    # create a new config file for each parallel job
-                    this_config = full_config.copy()
-                    this_config["Data"]["sorted_folder"] = new_sorted_folder
-                    these_configs.append(this_config)
-                # split iParams according to number of parallel jobs
-                iParams_split = np.array_split(
-                    iParams, full_config["Sorting"]["num_KS_jobs"]
-                )
-                # run parallel jobs
-                with ProcessPoolExecutor() as executor:
-                    executor.map(
-                        run_KS_sorting,
-                        iParams_split,
-                        these_configs,
-                        [recording] * full_config["Sorting"]["num_KS_jobs"],
-                    )
-            else:
-                this_config = full_config.copy()
-                this_config["Data"]["sorted_folder"] = Path(
-                    str(full_config["Data"]["sorted_folder"]) + "0"
-                )
-                if Path(this_config["Data"]["sorted_folder"]).exists():
-                    shutil.rmtree(
-                        this_config["Data"]["sorted_folder"], ignore_errors=True
-                    )
-                run_KS_sorting(iParams[0], this_config, recording)  # run single job
+            # create new folder for each parallel job to store results temporarily
+            these_configs = []
+            recording_list = []
+            for iW in worker_ids:
+                # create new folder for each parallel job
+                zfill_amount = len(str(full_config["Sorting"]["num_KS_jobs"]))
+                tmp_sorted_folder = str(full_config["Data"]["sorted_folder"]) + str(
+                    iW
+                ).zfill(zfill_amount)
+                if Path(tmp_sorted_folder).exists():
+                    shutil.rmtree(tmp_sorted_folder, ignore_errors=True)
+                # Path(tmp_sorted_folder).mkdir(parents=True, exist_ok=True)
+                recording_list.append(recording)
+                # create a new config file for each parallel job
+                this_config = deepcopy(full_config)
+                this_config["Data"]["sorted_folder"] = tmp_sorted_folder
+                # check for keys first
+                if "Th" in iParams[iW]:
+                    this_config["KS"]["Th_learned"] = iParams[iW]["Th"][0]
+                    this_config["KS"]["Th_universal"] = iParams[iW]["Th"][1]
+                if "spkTh" in iParams[iW]:
+                    this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
+                this_config["num_chans"] = recording.get_num_channels()
+                this_config["KS"]["nearest_chans"] = this_config["num_chans"]
+                these_configs.append(this_config)
+            # create spikeinterface job_list similar to below example
+            # here we run 2 sorters on 2 different recordings = 4 jobs
+            # recording = ...
+            # another_recording = ...
+            # job_list = [
+            #   {'sorter_name': 'tridesclous', 'recording': recording, 'output_folder': 'folder1','detect_threshold': 5.},
+            #   {'sorter_name': 'tridesclous', 'recording': another_recording, 'output_folder': 'folder2', 'detect_threshold': 5.},
+            #   {'sorter_name': 'herdingspikes', 'recording': recording, 'output_folder': 'folder3', 'clustering_bandwidth': 8., 'docker_image': True},
+            #   {'sorter_name': 'herdingspikes', 'recording': another_recording, 'output_folder': 'folder4', 'clustering_bandwidth': 8., 'docker_image': True},
+            # ]
+            # # run in parallel according to the job_list
+            # must split the job_list into smaller chunks divided by the number of parallel jobs
+            # sortings = run_sorter_jobs(job_list=job_list, engine='joblib', engine_kwargs={'n_jobs': 2})
+
+            job_list = [
+                {
+                    "sorter_name": "kilosort4",
+                    "recording": recording_list[i],
+                    "output_folder": these_configs[i]["Data"]["sorted_folder"],
+                    **these_configs[i]["KS"],
+                }
+                for i in range(total_KS_jobs)
+            ]
+
+            # split job_list according to number of parallel jobs
+            # job_list_split = np.array_split(
+            #     job_list, full_config["Sorting"]["num_KS_jobs"]
+            # )
+
+            # split iParams according to number of parallel jobs
+            # iParams_split = np.array_split(
+            #     iParams, full_config["Sorting"]["num_KS_jobs"]
+            # )
+            # # run parallel jobs
+            # with ProcessPoolExecutor() as executor:
+            #     executor.map(
+            #         run_KS_sorting,
+            #         iParams_split,
+            #         these_configs,
+            #         [recording] * full_config["Sorting"]["num_KS_jobs"],
+            #     )
+            run_KS_sorting(job_list, these_configs)
+            # else:
+            # this_config = full_config.copy()
+            # this_config["Data"]["sorted_folder"] = Path(
+            #     str(full_config["Data"]["sorted_folder"]) + "0"
+            # )
+            # if Path(this_config["Data"]["sorted_folder"]).exists():
+            #     shutil.rmtree(
+            #         this_config["Data"]["sorted_folder"], ignore_errors=True
+            #     )
+            # shutil.copytree(
+            #     full_config["Data"]["sorted_folder"], this_config["Data"]["sorted_folder"]
+            # )
+            # # check for keys first
+            # if "Th" in iParams[0]:
+            #     this_config["KS"]["Th_learned"] = iParams[0]["Th"][0]
+            #     this_config["KS"]["Th_universal"] = iParams[0]["Th"][1]
+            # if "spkTh" in iParams[0]:
+            #     this_config["KS"]["Th_single_ch"] = iParams[0]["spkTh"]
+            # this_config["num_chans"] = recording.get_num_channels()
+            # this_config["KS"]["nearest_chans"] = this_config["num_chans"]
+            # # Run spike sorting
+            # job_list = [
+            #     {
+            #         "sorter_name": "kilosort4",
+            #         "recording": recording,
+            #         "output_folder": this_config["Data"]["sorted_folder"],
+            #         **this_config["KS"],
+            #     }
+            # ]
 
     # Print status and time elapsed
     print("Pipeline finished! You've earned a break.")

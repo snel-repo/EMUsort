@@ -10,7 +10,7 @@ Data:
     # working_folder:
     # specify recordings to process (can be [all] or a list of integers, e.g., [1,2,5,6])
     # if more than one is provided, they will be concatenated prior to recording
-    emg_recordings: [1]
+    emg_recordings: [0]
     # set bandpass filter settings for emg data
     emg_passband:
         - 250
@@ -28,7 +28,7 @@ Sorting:
     # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is True
     num_KS_jobs: 1
     do_KS_param_gridsearch: False
-    gridsearch_params: # 
+    gridsearch_KS_params: # 
         Th: # in format [Th_learned, Th_universal] for each element
             - [9, 8]
             - [10, 4]
@@ -39,52 +39,52 @@ Sorting:
             - [6]
             - [3]
             - [9]
-            # - [-3, -6]
-            # - [-6, -9]
+            - [3, 6]
+            - [6, 9]
+            #- [3, 6, 9]
 # Group-specific parameters (Groups are sorted separately)
 Group:
-    emg_chan_map_file: # List of strings, each string is the channel map filename in /geometries 
-        - linear_08ch_sequential_kilosortChanMap_2um.mat
+    #emg_chan_map_file: # List of strings, each string is the channel map filename in /geometries 
+    #    - linear_08ch_sequential_kilosortChanMap_2um.mat
     emg_chan_list: # List of channels to sort, zero-indexed
         - [0,1,2,3,4,5,6,7]
     emg_analog_chan: 9 # index for the analog channel in the emg data (optional)
     remove_bad_emg_chans: # methods are mad, std, and coherence+psd, True defaults to mad
         - False
-    remove_chan_delays:
-        - False
 
 KS: # section where internal Kilosort settings are stored
-    Th_learned: 8
-    Th_single_ch: 6
-    Th_universal: 9
-    acg_threshold: 0.2
-    artifact_threshold: 
     batch_size: 60000
+    nblocks: 0
+    Th_universal: 9
+    Th_learned: 8
+    do_CAR: true
+    remove_chan_delays: true 
+    invert_sign: false
+    nt: 61
+    artifact_threshold:
+    nskip: 2
+    whitening_range: 32
     binning_depth: 5
+    sig_interp: 20
+    nt0min:
+    dmin:
+    dminx: 32
+    min_template_size: 10
+    template_sizes: 5
+    nearest_chans: 8
+    nearest_templates: 100
+    templates_from_data: true
+    n_templates: 9
+    n_pcs: 9
+    Th_single_ch: 6
+    acg_threshold: 0.2
     ccg_threshold: 0.25
     cluster_downsampling: 20
     cluster_pcs: 64
-    dmin: 
-    dminx: 32
-    do_CAR: False
-    do_correction: False
     duplicate_spike_bins: 15
-    invert_sign: False
-    keep_good_only: False
-    min_template_size: 10
-    n_pcs: 6
-    n_templates: 6
-    nblocks: 0
-    nearest_chans: 8
-    nearest_templates: 100
-    nskip: 25
-    nt: 61
-    nt0min: 
-    save_extra_kwargs: False
-    scaleproc: 
-    sig_interp: 20
-    skip_kilosort_preprocessing: False
-    template_sizes: 5
-    templates_from_data: True
-    torch_device: 'auto'
-    whitening_range: 32
+    do_correction: false
+    keep_good_only: false
+    save_extra_kwargs: false
+    skip_kilosort_preprocessing: false
+    scaleproc:
+    torch_device: auto
