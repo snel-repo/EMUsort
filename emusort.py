@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 from copy import deepcopy
+
 # from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Pool
 from pathlib import Path
@@ -28,6 +29,7 @@ from probeinterface import Probe  # , get_probe
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 from spikeinterface.exporters import export_to_phy
+from torch.cuda import is_available
 
 # import spikeinterface.comparison as sc
 # import spikeinterface.curation as scur
@@ -345,10 +347,12 @@ def concatenate_emg_data(
 
 def extract_sorting_result(sorting, ii):
     # Save sorting results by exporting to Phy format
-    waveforms_folder = Path(these_configs[ii]["Data"]["sorted_folder"]).joinpath(
-        "waveforms"
+    waveforms_folder = (
+        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output" / "waveforms"
     )
-    phy_folder = Path(these_configs[ii]["Data"]["sorted_folder"]).joinpath("phy")
+    phy_folder = (
+        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output" / "phy"
+    )
     try:
         we = si.extract_waveforms(job_list[ii]["recording"], sorting, waveforms_folder)
     except ValueError as e:
@@ -365,8 +369,20 @@ def extract_sorting_result(sorting, ii):
         )
 
     export_to_phy(
-        we, output_folder=phy_folder, copy_binary=True, use_relative_path=True
+        we,
+        output_folder=phy_folder,
+        compute_pc_features=False,
+        copy_binary=True,
+        use_relative_path=True,
     )
+    # move all phy files into sorter_output folder, overwriting existing files
+    shutil.copytree(
+        phy_folder,
+        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output",
+        dirs_exist_ok=True,
+    )
+    shutil.rmtree(phy_folder, ignore_errors=True)
+
     # move results into file folder for storage
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
     Th_this_config = (
@@ -374,12 +390,26 @@ def extract_sorting_result(sorting, ii):
         these_configs[ii]["KS"]["Th_universal"],
         tuple(these_configs[ii]["KS"]["Th_single_ch"]),
     )
-    params_suffix = f"Th_({Th_this_config[0]},{Th_this_config[1]},{Th_this_config[2]})"
+    params_suffix = (
+        f"Th_{Th_this_config[0]},{Th_this_config[1]}_spkTh_{Th_this_config[2]})"
+    )
+    # export the KS parameter keys that were gridsearched to the filename as Param1-Vals1_Param2-Vals2
+    # params_suffix = "_".join(
+    #     [
+    #         f"{key}-{val}"
+    #         for key, val in iParams[ii].items()
+    #         if key in these_configs[ii]["Sorting"]["gridsearch_KS_params"]
+    #     ]
+    # )
     final_filename = f'{str(Path(these_configs[ii]["Data"]["sorted_folder"]).parent/"sorted")}_{time_stamp_us}_{params_suffix}'
-    final_filename = final_filename.replace(
-        " ", ""
-    )  # remove whitespace from the filename
+    # remove whitespace and parens from the filename
+    final_filename = final_filename.replace(" ", "")
+    final_filename = final_filename.replace("(", "")
+    final_filename = final_filename.replace(")", "")
+
     shutil.copytree(these_configs[ii]["Data"]["sorted_folder"], final_filename)
+    # remove the temporary folder
+    shutil.rmtree(these_configs[ii]["Data"]["sorted_folder"], ignore_errors=True)
 
 
 def run_KS_sorting(job_list, these_configs):
@@ -405,6 +435,9 @@ def run_KS_sorting(job_list, these_configs):
     # do this in parallel using Pool
     with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
         pool.starmap(extract_sorting_result, zip(sortings, range(len(sortings))))
+    # do not do in parallel, because extract_waveforms consumes all CPUs for a single job
+    # for ii, sorting in enumerate(sortings):
+    #     extract_sorting_result(sorting, ii)
 
 
 if __name__ == "__main__":
@@ -551,9 +584,9 @@ if __name__ == "__main__":
         # recording.set_probe(probe)
 
         # Setting GPU Environment Variables
-        GPU_str = ",".join([str(i) for i in full_config["Sorting"]["GPU_to_use"]])
+        # GPU_str = ",".join([str(i) for i in full_config["Sorting"]["GPU_to_use"]])
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        os.environ["CUDA_VISIBLE_DEVICES"] = GPU_str
+        # os.environ["CUDA_VISIBLE_DEVICES"] = GPU_str
         full_config["Data"]["sorted_folder"] = (
             Path(full_config["Data"]["session_folder"]) / "sorted"
         )
@@ -579,6 +612,14 @@ if __name__ == "__main__":
             total_KS_jobs = len(iParams)
             # if full_config["Sorting"]["num_KS_jobs"] > 1:
             worker_ids = np.arange(total_KS_jobs)
+            torch_device_ids = [
+                str(
+                    full_config["Sorting"]["GPU_to_use"][
+                        j % len(full_config["Sorting"]["GPU_to_use"])
+                    ]
+                )
+                for j in worker_ids
+            ]
             # ensure proper configuration for parallel jobs
             # assert full_config["Sorting"]["num_KS_jobs"] <= len(
             #     full_config["Sorting"]["GPU_to_use"]
@@ -611,6 +652,10 @@ if __name__ == "__main__":
                     this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
                 this_config["num_chans"] = recording.get_num_channels()
                 this_config["KS"]["nearest_chans"] = this_config["num_chans"]
+                this_config["KS"]["torch_device"] = (
+                    "cuda:" + torch_device_ids[iW] if is_available() else "cpu"
+                )
+                # print(this_config["KS"]["torch_device"])
                 these_configs.append(this_config)
             # create spikeinterface job_list similar to below example
             # here we run 2 sorters on 2 different recordings = 4 jobs
