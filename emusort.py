@@ -175,7 +175,9 @@ def find(
 
 
 def load_ephys_data(
-    session_folder: Union[Path, str], channels: Union[List[int], np.ndarray]
+    session_folder: Union[Path, str],
+    channels: Union[List[int], np.ndarray],
+    config: dict,
 ) -> si.ChannelSliceRecording:
     """
     Loads electrophysiological data from the specified session folder and selects the specified channels.
@@ -187,9 +189,21 @@ def load_ephys_data(
     Returns:
     - si.ChannelSliceRecording: A ChannelSliceRecording object containing the selected channels.
     """
-    # TODO, check if the data is in Open Ephys format or other formats
-    # If loading Open Ephys data
-    loaded_recording = se.read_openephys(session_folder)
+    dataset_type = dataset_type
+    if dataset_type == "openephys":
+        # If loading Open Ephys data
+        loaded_recording = se.read_openephys(session_folder)
+    elif dataset_type == "intan":
+        # If loading Intan data
+        loaded_recording = se.read_intan(session_folder)
+    elif dataset_type == "binary":
+        # If loading binary data
+        loaded_recording = se.read_binary(
+            session_folder,
+            sampling_frequency=config["Data"]["emg_sampling_rate"],
+            num_channels=config["Data"]["emg_num_channels"],
+            dtype=config["Data"]["emg_dtype"],
+        )
     # Extract the channel IDs corresponding to the specified indices
     selected_channel_ids = loaded_recording.get_channel_ids()[channels]
     # Slice the recording to include only the specified channels
@@ -566,6 +580,7 @@ if __name__ == "__main__":
             "nblocks": int(0),
             "nearest_chans": len(full_config["Group"]["emg_chan_list"][0]),
             "do_correction": False,
+            "do_CAR": False,
         }
     )
 

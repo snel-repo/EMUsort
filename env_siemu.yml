@@ -3,10 +3,11 @@ name: siemu
 channels:
   - conda-forge
   - pytorch
-  - nvidia
+  # - nvidia
 dependencies:
-  - cuda-toolkit=12.4
-  - cuda-version=12.4
+  # - cuda-toolkit
+  # - cuda-version
+  - cudatoolkit
   - cxx-compiler
   - h5py
   - hdbscan
@@ -24,13 +25,12 @@ dependencies:
   - pandas
   - pip
   - pybind11
-  - pyqt=5
+  - pyqt=5 
   - pyqt5-sip
-  - pyqtgraph
   - pyqtwebengine
-  - python=3.11 # phy gui makes py311 the maximum, due to imp dependency
-  - pytorch-cuda=12.4
-  - pytorch-gpu
+  - pyqtgraph
+  - python=3.11 # phy gui makes py311 the maximum, due to imp dependency # - pytorch-cuda=12
+  - pytorch
   - ruamel.yaml
   - scikit-learn
   - scipy
@@ -38,12 +38,13 @@ dependencies:
   - xarray
   - zarr
   - pip:
-      - ephyviewer
-      - MEArec
-      # - git+https://github.com/SpikeInterface/spikeinterface.git@0.100.6
-      - spikeinterface[full,widgets]
-      - spikeinterface-gui
-      - tridesclous
-      # - git+https://github.com/MouseLand/Kilosort.git@v4.0.7
-      - -e ./sorting/Kilosort4
-      - git+https://github.com/cortex-lab/phy.git
+      - git+https://github.com/SpikeInterface/spikeinterface.git@0.100.7 # use spikeinterface release tag from GitHub
+      - "-e ./sorting/Kilosort4" # install local Kilosort4 for EMUsort
+      - git+https://github.com/cortex-lab/phy.git # latest version of phy from GitHub
+  
+  #   - ephyviewer
+  #   - MEArec
+  #   - spikeinterface[full,widgets] # latest spikeinterface from PyPI
+  #   - spikeinterface-gui
+  #   - tridesclous
+  #   - phy==2.0b5 # latest phy from PyPI

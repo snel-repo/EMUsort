@@ -23,8 +23,7 @@ dependencies:
   - pybind11
   - pyqt=5
   - pyqtgraph
-  - python=3.12
-  - ruamel.yaml
+  - python=3.11
   - scikit-learn
   - scipy
   - tqdm

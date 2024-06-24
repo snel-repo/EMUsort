@@ -28,7 +28,7 @@ dependencies:
   - pyqtwebengine
   - pytest
   - python=3.10
-  - pytorch-gpu
+  - pytorch
   - pytorch-cuda=12.1
   - pywavelets
   - pyyaml
