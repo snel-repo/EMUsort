@@ -51,7 +51,6 @@ Group:
     #    - linear_08ch_sequential_kilosortChanMap_2um.mat
     emg_chan_list: # List of channels to sort, zero-indexed
         - [0,1,2,3,4,5,6,7]
-    emg_analog_chan: 9 # index for the analog channel in the emg data (optional)
     remove_bad_emg_chans: # methods are mad, std, and coherence+psd, true defaults to mad
         - false
 

@@ -175,8 +175,6 @@ def find(
 
 
 def load_ephys_data(
-    session_folder: Union[Path, str],
-    channels: Union[List[int], np.ndarray],
     config: dict,
 ) -> si.ChannelSliceRecording:
     """
@@ -189,13 +187,40 @@ def load_ephys_data(
     Returns:
     - si.ChannelSliceRecording: A ChannelSliceRecording object containing the selected channels.
     """
-    dataset_type = dataset_type
+    # get all the channels across all groups, which will be sliced later (so as not to load more than once)
+    # channels = list(
+    #     set(
+    #         [
+    #             full_config["Group"]["emg_chan_list"][i]
+    #             for i in len(full_config["Group"]["emg_chan_list"])
+    #         ]
+    #     )
+    # )
+    # channels.sort()
+    session_folder = config["Data"]["session_folder"]
+    dataset_type = config["Data"]["dataset_type"]
     if dataset_type == "openephys":
         # If loading Open Ephys data
         loaded_recording = se.read_openephys(session_folder)
     elif dataset_type == "intan":
+        # get list of recordings
+        rhd_and_rhs_files = [
+            rhd_or_rhs
+            for rhd_or_rhs in list(Path.iterdir(Path(session_folder)))
+            if ("rhs" in rhd_or_rhs.name or "rhd" in rhd_or_rhs.name)
+        ]
+        if config["Data"]["emg_recordings"][0] == "all":
+            chosen_rhd_and_rhs_files = rhd_and_rhs_files
+        else:
+            chosen_rhd_and_rhs_files = [
+                rhd_and_rhs_files[i] for i in config["Data"]["emg_recordings"]
+            ]
         # If loading Intan data
-        loaded_recording = se.read_intan(session_folder)
+        loaded_recording_list = []
+        for iRec in chosen_rhd_and_rhs_files:
+            loaded_recording_list.append(se.read_intan(str(iRec), stream_id="0"))
+        loaded_recording = si.append_recordings(loaded_recording_list)
+        # from pdb import set_trace; set_trace()
     elif dataset_type == "binary":
         # If loading binary data
         loaded_recording = se.read_binary(
@@ -205,9 +230,9 @@ def load_ephys_data(
             dtype=config["Data"]["emg_dtype"],
         )
     # Extract the channel IDs corresponding to the specified indices
-    selected_channel_ids = loaded_recording.get_channel_ids()[channels]
+    # selected_channel_ids = loaded_recording.get_channel_ids()[channels]
     # Slice the recording to include only the specified channels
-    loaded_recording = loaded_recording.channel_slice(selected_channel_ids)
+    # loaded_recording = loaded_recording.channel_slice(selected_channel_ids)
     # # set a probe for the recording
     # probe = create_probe(loaded_recording)
     # loaded_recording.set_probe(probe)
@@ -217,7 +242,7 @@ def load_ephys_data(
 
 
 def preprocess_ephys_data(
-    recording_obj: si.ChannelSliceRecording, this_config: dict
+    recording_obj: si.ChannelSliceRecording, this_config: dict, iGroup: Union[int]
 ) -> si.ChannelSliceRecording:
     """
     Preprocesses the electrophysiological data based on the specified configuration.
@@ -234,15 +259,27 @@ def preprocess_ephys_data(
         emg_recordings_to_use = np.arange(recording_obj.get_num_segments())
     else:
         emg_recordings_to_use = np.array(this_config["Data"]["emg_recordings"])
-    if len(emg_recordings_to_use) > 1:
+    
+    # concatenate the recordings if it's the first sort group, otherwise simply load it from last iteration
+    if len(emg_recordings_to_use) > 1 and iGroup==0:
         loaded_recording = concatenate_emg_data(
             this_config["Data"]["session_folder"],
             emg_recordings_to_use,
             recording_obj,
             this_config,
         )
+    elif len(emg_recordings_to_use) > 1 and iGroup>0:
+        concat_data_path = this_config["Data"]["session_folder"] / "concatenated_data"
+        loaded_recording = si.load_extractor(concat_data_path)
     else:
         loaded_recording = recording_obj.select_segments(emg_recordings_to_use)
+
+    # slice channels for this group
+    selected_channel_ids = loaded_recording.get_channel_ids()[
+        this_config["Group"]["emg_chan_list"][iGroup]
+    ]
+    # Slice the recording to include only the specified channels
+    loaded_recording = loaded_recording.channel_slice(selected_channel_ids)
 
     # Apply bandpass filter to the EMG data
     recording_filtered = spre.bandpass_filter(
@@ -250,7 +287,7 @@ def preprocess_ephys_data(
         freq_min=this_config["Data"]["emg_passband"][0],
         freq_max=this_config["Data"]["emg_passband"][1],
     )
-    remove_bad_emg_chans = this_config["Group"]["remove_bad_emg_chans"][0]
+    remove_bad_emg_chans = this_config["Group"]["remove_bad_emg_chans"][iGroup]
     # detect bad channels on filtered recording
     if isinstance(remove_bad_emg_chans, bool):
         bad_channel_ids, _ = spre.detect_bad_channels(recording_filtered, method="mad")
@@ -259,7 +296,9 @@ def preprocess_ephys_data(
             recording_filtered, method=remove_bad_emg_chans
         )
     elif isinstance(remove_bad_emg_chans, (list, np.ndarray)):
-        bad_channel_ids = remove_bad_emg_chans
+        raise TypeError(
+            'Elements of this_config["Group"]["remove_bad_emg_chans"] type should either be bool or str'
+        )
     else:
         bad_channel_ids = None
 
@@ -270,7 +309,7 @@ def preprocess_ephys_data(
             f"Bad channels detected: {bad_channel_ids}, and none were removed because remove_bad_emg_chans is set to False."
         )
     else:
-        print("Bad Channels:\n" + str(bad_channel_ids))
+        print("Bad channels being removed:\n" + str(bad_channel_ids))
         recording_filtered = recording_filtered.channel_slice(
             np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids)
         )
@@ -301,7 +340,14 @@ def concatenate_emg_data(
 ) -> si.ChannelSliceRecording:
 
     def concat_and_save(concat_data_path: Path):
-        rec_list = [recording_object.select_segments([i]) for i in emg_recordings]
+        try:
+            rec_list = [recording_object.select_segments([i]) for i in emg_recordings]
+        except AssertionError:
+            rec_list = [
+                recording_object.select_segments([i])
+                for i in range(recording_object.get_num_segments())
+            ]
+
         print(f"Selected {len(rec_list)} recordings for concatenation.")
         recording_concatenated = si.concatenate_recordings(rec_list)
         print("Concatenated recording:", recording_concatenated)
@@ -415,15 +461,14 @@ def extract_sorting_result(sorting, ii):
     #         if key in these_configs[ii]["Sorting"]["gridsearch_KS_params"]
     #     ]
     # )
-    final_filename = f'{str(Path(these_configs[ii]["Data"]["sorted_folder"]).parent/"sorted")}_{time_stamp_us}_{params_suffix}'
+    final_filename = f'{str(Path(these_configs[ii]["Data"]["sorted_folder"]))}_{time_stamp_us}_{params_suffix}'
     # remove whitespace and parens from the filename
     final_filename = final_filename.replace(" ", "")
     final_filename = final_filename.replace("(", "")
     final_filename = final_filename.replace(")", "")
 
-    shutil.copytree(these_configs[ii]["Data"]["sorted_folder"], final_filename)
-    # remove the temporary folder
-    shutil.rmtree(these_configs[ii]["Data"]["sorted_folder"], ignore_errors=True)
+    # simply rename the folder
+    shutil.move(these_configs[ii]["Data"]["sorted_folder"], final_filename)
 
 
 def run_KS_sorting(job_list, these_configs):
@@ -448,7 +493,7 @@ def run_KS_sorting(job_list, these_configs):
     )
     # do this in parallel using Pool
     with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
-        pool.starmap(extract_sorting_result, zip(sortings, range(len(sortings))))
+        pool.starmap(extract_sorting_result, zip(sortings, range(len(job_list))))
     # do not do in parallel, because extract_waveforms consumes all CPUs for a single job
     # for ii, sorting in enumerate(sortings):
     #     extract_sorting_result(sorting, ii)
@@ -480,39 +525,33 @@ if __name__ == "__main__":
 
     yaml = YAML()
     # Generate, reset, or load config file
-    try:
-        if args.reset_config:
-            print("Configuration file will be reset to default template.")
-            create_config(Path(__file__).parent, Path(args.folder))
-            raise FileNotFoundError
-        # Load config file
-        config_file_path = Path(args.folder).joinpath("emu_config.yaml")
-        with open(config_file_path) as f:
-            full_config = yaml.load(f)
-    except FileNotFoundError as e:
-        if not args.reset_config:
-            print("WARNING: Configuration file not found, generating a new one...")
-        # Generate or update the configuration file
-        config_file_path = Path(args.folder).joinpath("emu_config.yaml")
-        # if the config doesn't exist, load the config template from the repo folder and KS defaults
-        if not config_file_path.exists():
-            create_config(Path(__file__).parent, Path(args.folder))
-            # insert the KS parameters into the config file, under the section "KS"
-            with open(config_file_path, "r") as f:
-                full_config = yaml.load(f)
-                KS_config = (
-                    ss.Kilosort4Sorter.default_params()
-                )  # Load default KS parameters
-                full_config["KS"] = (
-                    KS_config  # insert the KS parameters into the config file
-                )
-            with open(config_file_path, "w") as f:
-                yaml.dump(full_config, f)
-            print(f"Configuration file saved at {config_file_path}")
+    config_file_path = Path(args.folder).joinpath("emu_config.yaml")
+    # if the config doesn't exist or user wants to reset, load the config template
+    if not config_file_path.exists() or args.reset_config:
+        print(f"Generating config file from default template: \n{config_file_path}\n")
+        create_config(Path(__file__).parent, Path(args.folder))
+    # # Load config file
+    # with open(config_file_path) as f:
+    #     full_config = yaml.load(f)
+    #     if not args.reset_config:
+    #         print("WARNING: Configuration file not found, generating a new one...")
+    #         create_config(Path(__file__).parent, Path(args.folder))
+    #         # insert the default KS parameters into the config file, under the section "KS"
+    #         # with open(config_file_path, "r") as f:
+    #         #     full_config = yaml.load(f)
+    #         #     KS_config = (
+    #         #         ss.Kilosort4Sorter.default_params()
+    #         #     )  # Load default KS parameters
+    #         #     full_config["KS"] = (
+    #         #         KS_config  # insert the KS parameters into the config file
+    #         #     )
+    #         with open(config_file_path, "w") as f:
+    #             yaml.dump(full_config, f)
 
     # open text editor to edit the configuration file if desired
     if args.config:
         subprocess.run(["nano", config_file_path])
+
     full_config = yaml.load(config_file_path)
 
     # Prepare common configuration file
@@ -574,11 +613,16 @@ if __name__ == "__main__":
     #     }
     # )
 
-    # below are overrides to KS defaults which always improve performance with EMG data
+    # below are overrides to KS defaults which improve performance with EMG data
     full_config["KS"].update(
         {
             "nblocks": int(0),
-            "nearest_chans": len(full_config["Group"]["emg_chan_list"][0]),
+            "nearest_chans": max(
+                [
+                    len(full_config["Group"]["emg_chan_list"][i])
+                    for i in range(len(full_config["Group"]["emg_chan_list"]))
+                ]
+            ),
             "do_correction": False,
             "do_CAR": False,
         }
@@ -588,24 +632,17 @@ if __name__ == "__main__":
     if args.sort:
 
         # load data from the session folder
-        recording = load_ephys_data(
-            full_config["Data"]["session_folder"],
-            full_config["Group"]["emg_chan_list"][0],
-        )
-        # TODO: Preprocess EMG data
-        recording = preprocess_ephys_data(recording, full_config)
-        # update probe
-        # probe = create_probe(recording)
-        # recording.set_probe(probe)
+        recording = load_ephys_data(full_config)
 
         # Setting GPU Environment Variables
         # GPU_str = ",".join([str(i) for i in full_config["Sorting"]["GPU_to_use"]])
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         # os.environ["CUDA_VISIBLE_DEVICES"] = GPU_str
-        full_config["Data"]["sorted_folder"] = (
-            Path(full_config["Data"]["session_folder"]) / "sorted"
-        )
-        for iGroup in range(len(full_config["Group"]["emg_chan_list"])):
+        for iGroup, emg_chan_list in enumerate(full_config["Group"]["emg_chan_list"]):
+            recording = preprocess_ephys_data(recording, full_config, iGroup)
+            full_config["Data"]["sorted_folder"] = (
+                Path(full_config["Data"]["session_folder"]) / f"sorted_group_{iGroup}"
+            )
             print(f"Recording information: {recording}")
             full_config["sort_group"] = iGroup
             # full_config["emg_chan_map_file"] = (
@@ -613,9 +650,7 @@ if __name__ == "__main__":
             #     / "channel_maps"
             #     / full_config["Group"]["emg_chan_map_file"][iGroup]
             # )
-            full_config["num_chans"] = len(
-                full_config["Group"]["emg_chan_list"][iGroup]
-            )
+            # full_config["num_chans"] = len(emg_chan_list)
             iParams = list(
                 ParameterGrid(full_config["Sorting"]["gridsearch_KS_params"])
             )  # get iterator of all possible param combinations

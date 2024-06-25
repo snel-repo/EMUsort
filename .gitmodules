@@ -1,3 +1,7 @@
 [submodule "Kilosort4"]
 	path = sorting/Kilosort4
 	url = https://github.com/snel-repo/Kilosort4
+[submodule "spikeinterface"]
+	path = sorting/spikeinterface
+	url = https://github.com/snel-repo/spikeinterface.git
+	branch = emusort
