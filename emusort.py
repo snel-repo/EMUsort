@@ -379,15 +379,15 @@ def concatenate_emg_data(
             this_config_dict = path_to_str_recursive(
                 dict(this_config)
             )  # Cast to dictionary
-            if not dicts_match(last_config_dict, this_config_dict):
+            if not dicts_match(last_config_dict['Data'], this_config_dict['Data']):
                 print(
-                    "Configuration file has changed since last run, re-running concatenation..."
+                    "Data section of configuration file has changed since last run, re-running concatenation..."
                 )
                 recording_concatenated = concat_and_save(concat_data_path)
                 dump_yaml(concat_data_path.joinpath("last_config.yaml"), this_config)
             else:
                 print(
-                    "Configuration file has not changed since last run, will load previous concatenated data..."
+                    "Data section of configuration file has not changed since last run, will load previous concatenated data..."
                 )
                 try:
                     recording_concatenated = si.load_extractor(concat_data_path)
