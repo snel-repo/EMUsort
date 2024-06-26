@@ -8,10 +8,11 @@ Data:
     # session_folder:
     # path to working folder, for sort storage (should end in '_emg', then it will be auto-populated)
     # working_folder:
-    dataset_type: 'openephys' # can be 'openephys', 'intan' or 'binary'
-    emg_sampling_rate: 30000 # sampling rate of the emg data
-    emg_num_channels: 8 # number of channels in the recording
-    emg_dtype: 'int16' # data type of the emg data
+    dataset_type: 'openephys' # can be 'openephys', 'nwb', 'intan' or 'binary'
+    # below three settings are for when 'binary' dataset_type is used
+    emg_sampling_rate: 30000 # sampling rate of the emg data in binary file(s)
+    emg_num_channels: 8 # number of channels in the recording in binary file(s)
+    emg_dtype: 'int16' # data type of the emg data in binary file(s)
     # specify recordings to process (can be [all] or a list of integers, e.g., [1,2,5,6])
     # if more than one is provided, they will be concatenated prior to recording
     emg_recordings: [0]
@@ -30,6 +31,7 @@ Sorting:
     # number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
     # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is true
     num_KS_jobs: 1
+    # when do_KS_param_gridsearch is false, only the first elements are used for sorting
     do_KS_param_gridsearch: false
     gridsearch_KS_params: # 
         Th: # in format [Th_learned, Th_universal] for each element

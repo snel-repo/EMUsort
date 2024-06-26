@@ -144,36 +144,6 @@ def path_to_str_recursive(data):
         return data
 
 
-def find(
-    pattern: str, path: Union[Path, str], recursive: bool = True, exact: bool = False
-) -> List[Path]:
-    """
-    Finds files matching a pattern in the specified path.
-
-    Parameters:
-    - pattern: str - The pattern to search for in filenames.
-    - path: Union[Path, str] - The directory path to search in.
-    - recursive: bool - If True, search recursively. If False, search only in the specified directory.
-    - exact: bool - If True, match the exact pattern. If False, match any filenames containing the pattern.
-
-    Returns:
-    - List[Path]: A sorted list of Path objects matching the pattern.
-    """
-    try:
-        path = Path(path)
-    except TypeError:
-        raise TypeError("The provided path must be a string or Path object")
-
-    asterisk = "" if exact else "*"
-    search_pattern = (
-        f"**/{asterisk}{pattern}{asterisk}"
-        if recursive
-        else f"{asterisk}{pattern}{asterisk}"
-    )
-
-    return sorted(path.glob(search_pattern))
-
-
 def load_ephys_data(
     config: dict,
 ) -> si.ChannelSliceRecording:
@@ -203,11 +173,11 @@ def load_ephys_data(
         # If loading Open Ephys data
         loaded_recording = se.read_openephys(session_folder)
     elif dataset_type == "intan":
-        # get list of recordings
+        # get list of intan recordings
         rhd_and_rhs_files = [
             rhd_or_rhs
-            for rhd_or_rhs in list(Path.iterdir(Path(session_folder)))
-            if ("rhs" in rhd_or_rhs.name or "rhd" in rhd_or_rhs.name)
+            for rhd_or_rhs in sorted(Path.iterdir(Path(session_folder)))
+            if (".rhs" in rhd_or_rhs.name or ".rhd" in rhd_or_rhs.name)
         ]
         if config["Data"]["emg_recordings"][0] == "all":
             chosen_rhd_and_rhs_files = rhd_and_rhs_files
@@ -220,15 +190,48 @@ def load_ephys_data(
         for iRec in chosen_rhd_and_rhs_files:
             loaded_recording_list.append(se.read_intan(str(iRec), stream_id="0"))
         loaded_recording = si.append_recordings(loaded_recording_list)
-        # from pdb import set_trace; set_trace()
+    elif dataset_type == "nwb":
+        # get list of nwb recordings
+        nwb_files = [
+            nwb
+            for nwb in sorted(Path.iterdir(Path(session_folder)))
+            if ".nwb" in nwb.name
+        ]
+        if config["Data"]["emg_recordings"][0] == "all":
+            chosen_nwb_files = nwb_files
+        else:
+            chosen_nwb_files = [nwb_files[i] for i in config["Data"]["emg_recordings"]]
+        # If loading NWB data
+        loaded_recording_list = []
+        for iRec in chosen_nwb_files:
+            loaded_recording_list.append(se.NwbRecordingExtractor(str(iRec)))
+        loaded_recording = si.append_recordings(loaded_recording_list)
     elif dataset_type == "binary":
+        # get list of binary recordings
+        bin_or_dat_files = [
+            bin_or_dat
+            for bin_or_dat in sorted(Path.iterdir(Path(session_folder)))
+            if (".bin" in bin_or_dat.name or ".dat" in bin_or_dat.name)
+        ]
+        if config["Data"]["emg_recordings"][0] == "all":
+            chosen_bin_or_dat_files = bin_or_dat_files
+        else:
+            chosen_bin_or_dat_files = [
+                bin_or_dat_files[i] for i in config["Data"]["emg_recordings"]
+            ]
         # If loading binary data
-        loaded_recording = se.read_binary(
-            session_folder,
-            sampling_frequency=config["Data"]["emg_sampling_rate"],
-            num_channels=config["Data"]["emg_num_channels"],
-            dtype=config["Data"]["emg_dtype"],
-        )
+        loaded_recording_list = []
+        for iRec in chosen_bin_or_dat_files:
+            loaded_recording_list.append(
+                se.read_binary(
+                    str(iRec),
+                    sampling_frequency=config["Data"]["emg_sampling_rate"],
+                    num_channels=config["Data"]["emg_num_channels"],
+                    dtype=config["Data"]["emg_dtype"],
+                )
+            )
+        loaded_recording = si.append_recordings(loaded_recording_list)
+
     # Extract the channel IDs corresponding to the specified indices
     # selected_channel_ids = loaded_recording.get_channel_ids()[channels]
     # Slice the recording to include only the specified channels
@@ -259,16 +262,16 @@ def preprocess_ephys_data(
         emg_recordings_to_use = np.arange(recording_obj.get_num_segments())
     else:
         emg_recordings_to_use = np.array(this_config["Data"]["emg_recordings"])
-    
+
     # concatenate the recordings if it's the first sort group, otherwise simply load it from last iteration
-    if len(emg_recordings_to_use) > 1 and iGroup==0:
+    if len(emg_recordings_to_use) > 1 and iGroup == 0:
         loaded_recording = concatenate_emg_data(
             this_config["Data"]["session_folder"],
             emg_recordings_to_use,
             recording_obj,
             this_config,
         )
-    elif len(emg_recordings_to_use) > 1 and iGroup>0:
+    elif len(emg_recordings_to_use) > 1 and iGroup > 0:
         concat_data_path = this_config["Data"]["session_folder"] / "concatenated_data"
         loaded_recording = si.load_extractor(concat_data_path)
     else:
@@ -461,7 +464,7 @@ def extract_sorting_result(sorting, ii):
     #         if key in these_configs[ii]["Sorting"]["gridsearch_KS_params"]
     #     ]
     # )
-    final_filename = f'{str(Path(these_configs[ii]["Data"]["sorted_folder"]))}_{time_stamp_us}_{params_suffix}'
+    final_filename = f'{str(Path(these_configs[ii]["Data"]["sorted_folder"])).split("_worker")[0]}_{time_stamp_us}_{params_suffix}'
     # remove whitespace and parens from the filename
     final_filename = final_filename.replace(" ", "")
     final_filename = final_filename.replace("(", "")
@@ -639,11 +642,13 @@ if __name__ == "__main__":
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         # os.environ["CUDA_VISIBLE_DEVICES"] = GPU_str
         for iGroup, emg_chan_list in enumerate(full_config["Group"]["emg_chan_list"]):
-            recording = preprocess_ephys_data(recording, full_config, iGroup)
-            full_config["Data"]["sorted_folder"] = (
-                Path(full_config["Data"]["session_folder"]) / f"sorted_group_{iGroup}"
+            preproc_recording = preprocess_ephys_data(recording, full_config, iGroup)
+            grp_zfill_amount = len(str(len(full_config["Group"]["emg_chan_list"])))
+            this_group_sorted_folder = (
+                Path(full_config["Data"]["session_folder"])
+                / f"sorted_group_{str(iGroup).zfill(grp_zfill_amount)}"
             )
-            print(f"Recording information: {recording}")
+            print(f"Recording information: {preproc_recording}")
             full_config["sort_group"] = iGroup
             # full_config["emg_chan_map_file"] = (
             #     Path(full_config["Data"]["repo_folder"])
@@ -684,13 +689,15 @@ if __name__ == "__main__":
             for iW in worker_ids:
                 # create new folder for each parallel job
                 zfill_amount = len(str(full_config["Sorting"]["num_KS_jobs"]))
-                tmp_sorted_folder = str(full_config["Data"]["sorted_folder"]) + str(
-                    iW
-                ).zfill(zfill_amount)
+                tmp_sorted_folder = (
+                    str(this_group_sorted_folder)
+                    + "_worker"
+                    + str(iW).zfill(zfill_amount)
+                )
                 if Path(tmp_sorted_folder).exists():
                     shutil.rmtree(tmp_sorted_folder, ignore_errors=True)
                 # Path(tmp_sorted_folder).mkdir(parents=True, exist_ok=True)
-                recording_list.append(recording)
+                recording_list.append(preproc_recording)
                 # create a new config file for each parallel job
                 this_config = deepcopy(full_config)
                 this_config["Data"]["sorted_folder"] = tmp_sorted_folder
@@ -700,7 +707,7 @@ if __name__ == "__main__":
                     this_config["KS"]["Th_universal"] = iParams[iW]["Th"][1]
                 if "spkTh" in iParams[iW]:
                     this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
-                this_config["num_chans"] = recording.get_num_channels()
+                this_config["num_chans"] = preproc_recording.get_num_channels()
                 this_config["KS"]["nearest_chans"] = this_config["num_chans"]
                 this_config["KS"]["torch_device"] = (
                     "cuda:" + torch_device_ids[iW] if is_available() else "cpu"
