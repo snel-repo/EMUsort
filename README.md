@@ -35,7 +35,7 @@ To install micromamba and set up a micromamba environment, follow these steps:
     "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
     micromamba env create -f environment.yml
 #### Conda Environment (Option 2)
-To set up a conda environment, follow these steps:
+To install miniconda and set up a conda-forge environment, follow these steps:
 
     wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
     bash Miniforge3-Linux-x86_64.sh
@@ -62,7 +62,7 @@ Create a session folder which will contain the below 4 items:
    - Binary recording files
    - Open Ephys session folder
      - if using Open Ephys, that folder will act as the session folder
-4. `sorted` folders
+4. `sorted_###` folders (tagged with datetime stamps, parameters that were used, etc.)
    - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the ops used to sort the data. The original OpenEphys data will not be modified.
 5. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
@@ -96,7 +96,7 @@ To perform multiple operations in sequence, you can append any combination of th
 For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `python emusort.py --reset-config -csf /path/to/session_folder`
 
 ### Inspecting and Curating with `phy`
-To view and analyze the latest sort with Phy GUI, navigate to the `sort_output` folder, and run:
+To view and analyze the latest sort with Phy GUI, navigate to the `sorted_###/sorter_output` folder, and run:
 
     phy template-gui params.py
 
