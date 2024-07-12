@@ -11,7 +11,7 @@
 
 ## Installation
 ### Requirements
-  - Currently, using a Linux-based OS is recommended. The code has been tested on Ubuntu. Windows support is experimental and may require additional changes.
+  - Currently, using a Linux-based OS is recommended. The code has been tested on Ubuntu. Windows support is experimental and may require additional changes. MacOS not supported.
   - GPUs with compute capability >=5.0 are supported
   - Nvidia Driver:
     - Linux:      >=450.80.02
