@@ -1,26 +1,20 @@
 ---
-# Configuration file
-# Auto-generated parameters
+## EMUsort configuration file
+# Dataset parameters
+# provide information specific to the dataset you want to sort
 Data:
-    # path to repo and EMUsort.py script (always overwritten by program)
-    # repo_folder:
-    # path to session folder (must be provided in command line)
-    # session_folder:
-    # path to working folder, for sort storage (should end in '_emg', then it will be auto-populated)
-    # working_folder:
     dataset_type: 'openephys' # can be 'openephys', 'nwb', 'intan' or 'binary'
     # below three settings are for when 'binary' dataset_type is used
     emg_sampling_rate: 30000 # sampling rate of the emg data in binary file(s)
     emg_num_channels: 8 # number of channels in the recording in binary file(s)
     emg_dtype: 'int16' # data type of the emg data in binary file(s)
-    # specify recordings to process (can be [all] or a list of integers, e.g., [1,2,5,6])
-    # if more than one is provided, they will be concatenated prior to recording
+    # specify recordings to process (can be [all] or a list of integers, e.g., [0,1,2,5,6])
+    # chosen recordings will be concatenated prior to sorting
     emg_recordings: [0]
     # set bandpass filter settings for emg data
     emg_passband:
         - 250
         - 5000
-    # set bandpass filter settings for emg data
     time_range: # can be used to slice along time, set start and end to 0 to use all data
         - 0
         - 0
@@ -31,7 +25,7 @@ Sorting:
     # number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
     # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is true
     num_KS_jobs: 1
-    # when do_KS_param_gridsearch is false, only the first elements are used for sorting
+    # when do_KS_param_gridsearch is false, only the first rows of each parameter are used (default)
     do_KS_param_gridsearch: false
     gridsearch_KS_params: # 
         Th: # in format [Th_learned, Th_universal] for each element
@@ -47,17 +41,19 @@ Sorting:
             - [3, 6]
             - [6, 9]
             #- [3, 6, 9]
-# Group-specific parameters (Groups are sorted separately)
+# Group-specific parameters
+# channel groups are sorted separately, rows of each parameter define settings for each group
 Group:
-    #emg_chan_map_file: # List of strings, each string is the channel map filename in /geometries 
-    #    - linear_08ch_sequential_kilosortChanMap_2um.mat
     emg_chan_list: # List of channels to sort, zero-indexed
         - [0,1,2,3,4,5,6,7]
-    remove_bad_emg_chans: # methods are mad, std, and coherence+psd, true defaults to mad
+        #- [8,9,10,11,12,13,14] # this row defines parameters for the second group
+    remove_bad_emg_chans: # false to disable, or a string for the method. Can be 'mad', 'std', or 'coherence+psd' (true defaults to mad)
         - false
-
-KS: # section where internal Kilosort settings are stored
-    remove_chan_delays: true # this setting is added for EMUsort
+        #- true # if true, the second group would have bad chans removed by 'mad' method
+# Kilosort parameters, nblocks, nearest_chans, do_correction, and do_CAR are all overwritten
+# inside emusort.py to avoid poor performance
+KS:
+    remove_chan_delays: true # this setting is added to KS4 for EMUsort
     batch_size: 60000
     nblocks: 0
     Th_universal: 9
