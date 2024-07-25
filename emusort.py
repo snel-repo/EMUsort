@@ -246,7 +246,7 @@ def load_ephys_data(
 
 def preprocess_ephys_data(
     recording_obj: si.ChannelSliceRecording, this_config: dict, iGroup: Union[int]
-) -> si.ChannelSliceRecording:
+) -> Union[si.ChannelSliceRecording, si.FrameSliceRecording]:
     """
     Preprocesses the electrophysiological data based on the specified configuration.
 
@@ -257,12 +257,24 @@ def preprocess_ephys_data(
     Returns:
     - si.ChannelSliceRecording: The preprocessed ChannelSliceRecording object.
     """
+    time_range_is_disabled = (
+        this_config["Data"]["time_range"][0] == 0
+        and this_config["Data"]["time_range"][1] == 0
+    )
+    assert time_range_is_disabled or (
+        this_config["Data"]["time_range"][0] < this_config["Data"]["time_range"][1]
+    ), "First element of time_range must be less than the second element."
+
     # check which recordings to use and whether to call concatenate_emg_data
     if this_config["Data"]["emg_recordings"][0] == "all":
         emg_recordings_to_use = np.arange(recording_obj.get_num_segments())
     else:
         emg_recordings_to_use = np.array(this_config["Data"]["emg_recordings"])
 
+    if len(emg_recordings_to_use) > 1 and time_range_is_disabled:
+        raise ValueError(
+            "Time range must be disabled if concatenating recordings (i.e., time_range: [0, 0])."
+        )
     # concatenate the recordings if it's the first sort group, otherwise simply load it from last iteration
     if len(emg_recordings_to_use) > 1 and iGroup == 0:
         loaded_recording = concatenate_emg_data(
@@ -282,11 +294,27 @@ def preprocess_ephys_data(
         this_config["Group"]["emg_chan_list"][iGroup]
     ]
     # Slice the recording to include only the specified channels
-    loaded_recording = loaded_recording.channel_slice(selected_channel_ids)
+    sliced_recording = loaded_recording.channel_slice(selected_channel_ids)
+    if not time_range_is_disabled:
+        # Slice the recording to include only the specified time range
+        sliced_recording = sliced_recording.frame_slice(
+            start_frame=int(
+                round(
+                    this_config["Data"]["time_range"][0]
+                    * loaded_recording.get_sampling_frequency()
+                )
+            ),
+            end_frame=int(
+                round(
+                    this_config["Data"]["time_range"][1]
+                    * loaded_recording.get_sampling_frequency()
+                )
+            ),
+        )
 
     # Apply bandpass filter to the EMG data
     recording_filtered = spre.bandpass_filter(
-        loaded_recording,
+        sliced_recording,
         freq_min=this_config["Data"]["emg_passband"][0],
         freq_max=this_config["Data"]["emg_passband"][1],
     )
@@ -379,7 +407,7 @@ def concatenate_emg_data(
             this_config_dict = path_to_str_recursive(
                 dict(this_config)
             )  # Cast to dictionary
-            if not dicts_match(last_config_dict['Data'], this_config_dict['Data']):
+            if not dicts_match(last_config_dict["Data"], this_config_dict["Data"]):
                 print(
                     "Data section of configuration file has changed since last run, re-running concatenation..."
                 )
@@ -410,14 +438,12 @@ def concatenate_emg_data(
 
 def extract_sorting_result(sorting, ii):
     # Save sorting results by exporting to Phy format
-    waveforms_folder = (
-        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output" / "waveforms"
-    )
-    phy_folder = (
-        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output" / "phy"
-    )
+    waveforms_folder = Path(these_configs[ii]["Data"]["sorted_folder"]) / "waveforms"
+    phy_folder = Path(these_configs[ii]["Data"]["sorted_folder"]) / "phy"
     try:
-        we = si.extract_waveforms(job_list[ii]["recording"], sorting, waveforms_folder)
+        we = si.extract_waveforms(
+            job_list[ii]["recording"], sorting, waveforms_folder, overwrite=True
+        )
     except ValueError as e:
         print("Error extracting waveforms:", e)
         import spikeinterface.curation as scur
@@ -428,7 +454,7 @@ def extract_sorting_result(sorting, ii):
 
         # loaded_recording.set_probe(probe)
         we = si.extract_waveforms(
-            remove_excess_spikes_recording, sorting, waveforms_folder
+            remove_excess_spikes_recording, sorting, waveforms_folder, overwrite=True
         )
 
     export_to_phy(
@@ -437,11 +463,24 @@ def extract_sorting_result(sorting, ii):
         compute_pc_features=False,
         copy_binary=True,
         use_relative_path=True,
+        verbose=False,
     )
-    # move all phy files into sorter_output folder, overwriting existing files
+
+    # move all sorter_output files into sorted_folder, then delete it
+    shutil.copytree(
+        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output",
+        Path(these_configs[ii]["Data"]["sorted_folder"]),
+        dirs_exist_ok=True,
+    )
+    shutil.rmtree(
+        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output",
+        ignore_errors=True,
+    )
+
+    # move all phy files into sorted_folder, overwriting any existing duplicate files, then delete it
     shutil.copytree(
         phy_folder,
-        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output",
+        Path(these_configs[ii]["Data"]["sorted_folder"]),
         dirs_exist_ok=True,
     )
     shutil.rmtree(phy_folder, ignore_errors=True)
@@ -469,9 +508,16 @@ def extract_sorting_result(sorting, ii):
     final_filename = final_filename.replace(" ", "")
     final_filename = final_filename.replace("(", "")
     final_filename = final_filename.replace(")", "")
+    # remove trailing comma from the filename
+    if final_filename[-1] == ",":
+        final_filename = final_filename[:-1]
 
-    # simply rename the folder
+    # rename the folder to preserve the latest sorting results in the sorted_group#_worker# folder
     shutil.move(these_configs[ii]["Data"]["sorted_folder"], final_filename)
+    # add entry to the config file for the final folder
+    # these_configs[ii]["Data"]["final_folder"] = final_filename
+    # print for user to copy and paste into terminal if desired
+    print(f"\nRun:\nphy template-gui {final_filename}/params.py\n")
 
 
 def run_KS_sorting(job_list, these_configs):
@@ -482,10 +528,7 @@ def run_KS_sorting(job_list, these_configs):
     #         "recording": recording_list[i],
     #         "output_folder": these_configs[i]["Data"]["sorted_folder"],
     #         **this_config["KS"],
-    # update the KS parameters in the config file using the iParams values
-
-    # this_config["Group"]["emg_chan_list"] = np.arange(this_config["num_chans"])
-    # loaded_recording.set_channel_locations(probe.contact_positions)
+    #     }
 
     # Run spike sorting
     sortings = ss.run_sorter_jobs(
@@ -494,12 +537,16 @@ def run_KS_sorting(job_list, these_configs):
         engine_kwargs={"n_jobs": these_configs[0]["Sorting"]["num_KS_jobs"]},
         return_output=True,
     )
-    # do this in parallel using Pool
-    with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
-        pool.starmap(extract_sorting_result, zip(sortings, range(len(job_list))))
-    # do not do in parallel, because extract_waveforms consumes all CPUs for a single job
-    # for ii, sorting in enumerate(sortings):
-    #     extract_sorting_result(sorting, ii)
+    # Now extract and write the sorting results to each sorted_folder
+    try:
+        # do this in parallel using Pool
+        with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
+            pool.starmap(extract_sorting_result, zip(sortings, range(len(job_list))))
+    except (
+        NameError
+    ):  # this is to catch a Windows error where these_configs is not defined in the worker
+        for ii, sorting in enumerate(sortings):
+            extract_sorting_result(sorting, ii)
 
 
 if __name__ == "__main__":
@@ -523,6 +570,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "-s", "--sort", action="store_true", help="Perform spike sorting"
     )
+    # parser.add_argument(
+    #     "-p",
+    #     "--phy",
+    #     action="store_true",
+    #     help="Open Phy GUI for the specified folder datestring. Defaults to latest folder without datestring.",
+    # )
 
     args = parser.parse_args()
 
@@ -794,5 +847,19 @@ if __name__ == "__main__":
         f"Time elapsed: {strfdelta(time_elapsed, '{hours} hours, {minutes} minutes, {seconds} seconds')}"
     )
 
-    # Reset terminal mode
-    subprocess.run(["stty", "sane"])
+    # if args.phy:
+    #     # make sure only one sort was performed
+    #     if len(these_configs) > 1 or len(full_config["Group"]["emg_chan_list"]) > 1:
+    #         print(
+    #             "Multiple sorts were performed, ignoring -p/--phy flag. Phy command can only be used for one sort at a time."
+    #         )
+    #         args.phy = False
+
+    #     if args.phy:
+    #         # open Phy GUI for this final folder
+    #         subprocess.run(
+    #             ["phy", "template-gui", these_configs[0]["Data"]["final_folder"]]
+    #         )
+
+    # # Reset terminal mode
+    # subprocess.run(["stty", "sane"])
