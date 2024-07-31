@@ -323,12 +323,35 @@ def preprocess_ephys_data(
     if isinstance(remove_bad_emg_chans, bool):
         bad_channel_ids, _ = spre.detect_bad_channels(recording_filtered, method="mad")
     elif isinstance(remove_bad_emg_chans, str):
+        probe = create_probe(recording_filtered)
+        recording_filtered = recording_filtered.set_probe(probe)
+        # input can be either "mad" or "coherence+psd", but users may input mad# where # is a number
+        # setting the threshold
+        numeric_idxs = np.nonzero([i.isdigit() for i in remove_bad_emg_chans])[0]
+        num_digits = len(numeric_idxs)
+        if num_digits > 0:
+            if num_digits > 1:
+                assert (
+                    np.diff(numeric_idxs).all() == 1
+                ), f"Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. If using a threshold, it must be a number after the method string."
+            method_str = remove_bad_emg_chans[: numeric_idxs[0]]
+            assert (
+                method_str != "coherence+psd"
+            ), f'Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. "coherence+psd" method does not take a threshold value.'
+            threshold = int(remove_bad_emg_chans[numeric_idxs[0] :])
+        else:
+            method_str = remove_bad_emg_chans
+            threshold = 5
+        if method_str not in ["coherence+psd", "std", "mad"]:
+            raise ValueError(
+                f'remove_bad_emg_chans method string must be either "coherence+psd", "std", "mad", "std#", or "mad#" where # is a number to set the threshold, but got "{remove_bad_emg_chans}".'
+            )
         bad_channel_ids, _ = spre.detect_bad_channels(
-            recording_filtered, method=remove_bad_emg_chans
+            recording_filtered, method=method_str, std_mad_threshold=threshold
         )
     elif isinstance(remove_bad_emg_chans, (list, np.ndarray)):
         raise TypeError(
-            'Elements of this_config["Group"]["remove_bad_emg_chans"] type should either be bool or str'
+            f'Elements of this_config["Group"]["remove_bad_emg_chans"] type should either be bool or str, but got {type(remove_bad_emg_chans)}.'
         )
     else:
         bad_channel_ids = None
@@ -673,12 +696,6 @@ if __name__ == "__main__":
     full_config["KS"].update(
         {
             "nblocks": int(0),
-            "nearest_chans": max(
-                [
-                    len(full_config["Group"]["emg_chan_list"][i])
-                    for i in range(len(full_config["Group"]["emg_chan_list"]))
-                ]
-            ),
             "do_correction": False,
             "do_CAR": False,
         }
