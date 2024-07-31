@@ -50,8 +50,8 @@ Group:
     remove_bad_emg_chans: # false to disable, or a string for the method. Can be 'coherence+psd', 'mad', 'std', 'mad#', or 'std#', where # is the cutoff threshold (true defaults to 'mad5'). See spikeinterface's detect_bad_channels() method for more info.
         - false
         #- true # if true, the second group would have bad chans removed by 'mad' method
-# Kilosort parameters, nblocks, nearest_chans, do_correction, and do_CAR are all overwritten
-# inside emusort.py to avoid poor performance
+# Kilosort parameters
+# nearest_chans and torch_device may be modified in emusort.py to avoid errors
 KS:
     remove_chan_delays: true # this setting is added to KS4 for EMUsort
     batch_size: 60000
