@@ -15,7 +15,7 @@
 
 ### Requirements
 
-- Currently, using a Linux-based OS is recommended. The code has been tested on Ubuntu. Windows support is experimental and may require additional changes.
+- Currently, using a Linux-based OS is recommended. The code has been tested on Ubuntu. Windows is supported, but may require additional changes as specified below.
 - GPUs with compute capability >=5.0 are supported
 - Nvidia Driver:
   - Linux: >=450.80.02
@@ -27,7 +27,7 @@
 
 Clone the repository recursively onto your machine (for example, in the home directory)
 
-    git clone --recurse-submodules https://github.com/snel-repo/EMUsort.git
+```git clone --recurse-submodules https://github.com/snel-repo/EMUsort.git```
 
 - If you accidentally ran `git clone` without `--recurse-submodules`, just delete the entire `EMUsort` folder and rerun the above command
 
@@ -40,8 +40,19 @@ Make sure to navigate into the `EMUsort` folder created
 
 To install micromamba and set up a micromamba environment, follow these steps:
 
-    "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
-    micromamba env create -f environment.yml
+>**Windows:** Command causes issue with PowerShell as "<" operator is reserved. Use GitBash shell.
+
+```"${SHELL}" <(curl -L micro.mamba.pm/install.sh)```
+
+Make sure to restart terminal (manually or with `source` to activate micromamba install)
+
+```micromamba env create -f environment.yml```
+
+>**Windows:** The final dependencies related to `pip` may not install, returning an error.
+If so, first activate micromamba environment (`micromamba activate emusort`) and then run:
+
+>```pip3 install -e ./sorting/spikeinterface ./sorting/Kilosort4 "git+https://github.com/cortex-lab/phy.git"```
+
 
 #### Conda Environment (Option 2)
 
