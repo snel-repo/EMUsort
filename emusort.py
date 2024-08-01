@@ -532,9 +532,15 @@ def extract_sorting_result(sorting, ii):
     # )
     final_filename = f'{str(Path(these_configs[ii]["Data"]["sorted_folder"])).split("_worker")[0]}_{time_stamp_us}_{params_suffix}'
     # remove whitespace and parens from the filename
-    final_filename = final_filename.replace(" ", "")
-    final_filename = final_filename.replace("(", "")
-    final_filename = final_filename.replace(")", "")
+    # final_filename = final_filename.replace(" ", "")
+    # final_filename = final_filename.replace("(", "")
+    # final_filename = final_filename.replace(")", "")
+    # remove whitespace and parens from the stem of the filename
+    final_filename = Path(final_filename)
+    final_filename = final_filename.with_name(final_filename.stem.replace(" ", ""))
+    final_filename = final_filename.with_name(final_filename.stem.replace("(", ""))
+    final_filename = final_filename.with_name(final_filename.stem.replace(")", ""))
+    final_filename = str(final_filename)
     # remove trailing comma from the filename
     if final_filename[-1] == ",":
         final_filename = final_filename[:-1]
