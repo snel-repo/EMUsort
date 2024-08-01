@@ -28,11 +28,11 @@ Data:
 Sorting:
     # GPU to use for kilosort, (a list of integers, e.g., [1,2,5,6])
     GPU_to_use: [0]
-    # number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
+    # number of Kilosort jobs to run at once
     # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is true
     num_KS_jobs: 1
     # when do_KS_param_gridsearch is false, only the first elements are used for sorting
-    do_KS_param_gridsearch: false
+    do_KS_param_gridsearch: false # set to true for gridsearch
     gridsearch_KS_params: # 
         Th: # in format [Th_learned, Th_universal] for each element
             - [9, 8]

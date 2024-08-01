@@ -2,3 +2,4 @@
 *.mexa64
 __pycache__
 .vscode
+.DS_Store
