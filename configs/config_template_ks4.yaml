@@ -70,7 +70,7 @@ KS:
     dminx: 32
     min_template_size: 10
     template_sizes: 5
-    nearest_chans: 8
+    nearest_chans: 10
     nearest_templates: 100
     templates_from_data: true
     n_templates: 6
