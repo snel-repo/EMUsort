@@ -51,7 +51,7 @@ Make sure to restart terminal (manually or with `source` to activate micromamba 
 >**Windows:** The final dependencies related to `pip` may not install, returning an error.
 If so, first activate micromamba environment (`micromamba activate emusort`) and then run:
 
->   pip3 install -e ./sorting/spikeinterface ./sorting/Kilosort4 "git+https://github.com/cortex-lab/phy.git"
+    pip3 install -e ./sorting/spikeinterface ./sorting/Kilosort4 "git+https://github.com/cortex-lab/phy.git"
 
 
 #### Conda Environment (Option 2)
