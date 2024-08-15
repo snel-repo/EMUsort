@@ -453,7 +453,7 @@ def concatenate_emg_data(
     return recording_concatenated
 
 
-def extract_sorting_result(sorting, ii):
+def extract_sorting_result(sorting, this_config, ii):
     """
     Parallel-friendly function to extract and save the sorting results to the specified folder.
 
@@ -465,11 +465,23 @@ def extract_sorting_result(sorting, ii):
     - None
     """
     # Save sorting results by exporting to Phy format
-    waveforms_folder = Path(these_configs[ii]["Data"]["sorted_folder"]) / "waveforms"
-    phy_folder = Path(these_configs[ii]["Data"]["sorted_folder"]) / "phy"
+    waveforms_folder = Path(this_config["Sorting"]["sorted_folder"]) / "waveforms"
+    phy_folder = Path(this_config["Sorting"]["sorted_folder"]) / "phy"
+    # get nt size from the sorting object, which is the width of the waveforms
+    sampling_frequency = this_config["Data"]["emg_sampling_rate"]
+    nt = this_config["KS"]["nt"]
+    ms_buffer = nt / sampling_frequency * 1000 / 2
+    print(
+        f"Worker {ii} extracting waveforms with nt={nt} at fs={sampling_frequency} Hz (ms_before=ms_after={np.round(ms_buffer, 3)} ms)."
+    )
     try:
         we = si.extract_waveforms(
-            job_list[ii]["recording"], sorting, waveforms_folder, overwrite=True
+            job_list[ii]["recording"],
+            sorting,
+            waveforms_folder,
+            ms_before=ms_buffer,
+            ms_after=ms_buffer,
+            overwrite=True,
         )
     except ValueError as e:
         print("Error extracting waveforms:", e)
@@ -495,19 +507,19 @@ def extract_sorting_result(sorting, ii):
 
     # move all sorter_output files into sorted_folder, then delete it
     shutil.copytree(
-        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output",
-        Path(these_configs[ii]["Data"]["sorted_folder"]),
+        Path(this_config["Sorting"]["sorted_folder"]) / "sorter_output",
+        Path(this_config["Sorting"]["sorted_folder"]),
         dirs_exist_ok=True,
     )
     shutil.rmtree(
-        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output",
+        Path(this_config["Sorting"]["sorted_folder"]) / "sorter_output",
         ignore_errors=True,
     )
 
     # move all phy files into sorted_folder, overwriting any existing duplicate files, then delete it
     shutil.copytree(
         phy_folder,
-        Path(these_configs[ii]["Data"]["sorted_folder"]),
+        Path(this_config["Sorting"]["sorted_folder"]),
         dirs_exist_ok=True,
     )
     shutil.rmtree(phy_folder, ignore_errors=True)
@@ -515,9 +527,9 @@ def extract_sorting_result(sorting, ii):
     # move results into file folder for storage
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
     Th_this_config = (
-        these_configs[ii]["KS"]["Th_learned"],
-        these_configs[ii]["KS"]["Th_universal"],
-        tuple(these_configs[ii]["KS"]["Th_single_ch"]),
+        this_config["KS"]["Th_learned"],
+        this_config["KS"]["Th_universal"],
+        tuple(this_config["KS"]["Th_single_ch"]),
     )
     params_suffix = (
         f"Th_{Th_this_config[0]},{Th_this_config[1]}_spkTh_{Th_this_config[2]})"
@@ -527,26 +539,27 @@ def extract_sorting_result(sorting, ii):
     #     [
     #         f"{key}-{val}"
     #         for key, val in iParams[ii].items()
-    #         if key in these_configs[ii]["Sorting"]["gridsearch_KS_params"]
+    #         if key in this_config["Sorting"]["gridsearch_KS_params"]
     #     ]
     # )
-    final_filename = f'{str(Path(these_configs[ii]["Data"]["sorted_folder"])).split("_worker")[0]}_{time_stamp_us}_{params_suffix}'
+    final_filename = f'{str(Path(this_config["Sorting"]["sorted_folder"])).split("_worker")[0]}_{time_stamp_us}_{params_suffix}'
     # remove whitespace and parens from the filename
     # final_filename = final_filename.replace(" ", "")
     # final_filename = final_filename.replace("(", "")
     # final_filename = final_filename.replace(")", "")
     # remove whitespace and parens from the stem of the filename
     final_filename = Path(final_filename)
-    final_filename = final_filename.with_name(final_filename.stem.replace(" ", ""))
-    final_filename = final_filename.with_name(final_filename.stem.replace("(", ""))
-    final_filename = final_filename.with_name(final_filename.stem.replace(")", ""))
+    final_filename = final_filename.with_name(final_filename.name.replace(" ", ""))
+    final_filename = final_filename.with_name(final_filename.name.replace("(", ""))
+    final_filename = final_filename.with_name(final_filename.name.replace(")", ""))
     final_filename = str(final_filename)
     # remove trailing comma from the filename
     if final_filename[-1] == ",":
         final_filename = final_filename[:-1]
 
     # rename the folder to preserve the latest sorting results in the sorted_group#_worker# folder
-    shutil.move(these_configs[ii]["Data"]["sorted_folder"], final_filename)
+    # also make a new sorter_output_HHMMSSffffff folder with a timestamp
+    shutil.move(this_config["Sorting"]["sorted_folder"], final_filename)
     # add entry to the config file for the final folder
     # these_configs[ii]["Data"]["final_folder"] = final_filename
     # print for user to copy and paste into terminal if desired
@@ -569,7 +582,7 @@ def run_KS_sorting(job_list, these_configs):
     #     {
     #         "sorter_name": "kilosort4",
     #         "recording": recording_list[i],
-    #         "output_folder": these_configs[i]["Data"]["sorted_folder"],
+    #         "output_folder": these_configs[i]["Sorting"]["sorted_folder"],
     #         **this_config["KS"],
     #     }
 
@@ -580,16 +593,23 @@ def run_KS_sorting(job_list, these_configs):
         engine_kwargs={"n_jobs": these_configs[0]["Sorting"]["num_KS_jobs"]},
         return_output=True,
     )
+
     # Now extract and write the sorting results to each sorted_folder
-    try:
-        # do this in parallel using Pool
-        with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
-            pool.starmap(extract_sorting_result, zip(sortings, range(len(job_list))))
-    except (
-        NameError
-    ):  # this is to catch a Windows error where these_configs is not defined in the worker
-        for ii, sorting in enumerate(sortings):
-            extract_sorting_result(sorting, ii)
+    if these_configs[0]["Sorting"]["num_KS_jobs"] > 1:
+        try:
+            # do this in parallel using Pool
+            with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
+                pool.starmap(
+                    extract_sorting_result,
+                    zip(sortings, these_configs, range(len(job_list))),
+                )
+        except (
+            NameError
+        ):  # this is to catch a Windows error where these_configs is not defined in the worker
+            for ii, sorting in enumerate(sortings):
+                extract_sorting_result(sorting, these_configs[ii], ii)
+    else:
+        extract_sorting_result(sortings[0], these_configs[0], 0)
 
 
 if __name__ == "__main__":
@@ -628,12 +648,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Generate, reset, or load config file
-    config_file_path = Path(args.folder).joinpath("emu_config.yaml")
+    config_file_path = (
+        Path(args.folder).expanduser().resolve().joinpath("emu_config.yaml")
+    )
     # if the config doesn't exist or user wants to reset, load the config template
     if not config_file_path.exists() or args.reset_config or args.reset_config_ks4:
         print(f"Generating config file from default template: \n{config_file_path}\n")
         create_config(
-            Path(__file__).parent, Path(args.folder), ks4=args.reset_config_ks4
+            Path(__file__).parent,
+            Path(args.folder).expanduser().resolve(),
+            ks4=args.reset_config_ks4,
         )
 
     # open text editor to validate or edit the configuration file if desired
@@ -648,7 +672,7 @@ if __name__ == "__main__":
     full_config["Data"].update(
         {
             "repo_folder": Path(__file__).parent,
-            "session_folder": Path(args.folder),
+            "session_folder": Path(args.folder).expanduser().resolve(),
         }
     )
 
@@ -664,19 +688,23 @@ if __name__ == "__main__":
 
         # load data from the session folder
         recording = load_ephys_data(full_config)
-
         # Setting GPU ordering for parallel jobs to match nvidia-smi and nvitop
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        # ensure that the output folder is set to the session folder if not specified
+        if full_config["Sorting"]["output_folder"] is None:
+            full_config["Sorting"]["output_folder"] = Path(
+                full_config["Data"]["session_folder"]
+            )
         # loop through each group of EMG channels to sort independently
         for iGroup, emg_chan_list in enumerate(full_config["Group"]["emg_chan_list"]):
             preproc_recording = preprocess_ephys_data(recording, full_config, iGroup)
             grp_zfill_amount = len(str(len(full_config["Group"]["emg_chan_list"])))
             this_group_sorted_folder = (
-                Path(full_config["Data"]["session_folder"])
-                / f"sorted_group_{str(iGroup).zfill(grp_zfill_amount)}"
+                Path(full_config["Sorting"]["output_folder"]).expanduser().resolve()
+                / f'{Path(full_config["Data"]["session_folder"]).name}_group{str(iGroup).zfill(grp_zfill_amount)}'
             )
             print(f"Recording information: {preproc_recording}")
-            full_config["sort_group"] = iGroup
+            # full_config["sort_group"] = iGroup
             iParams = list(
                 ParameterGrid(full_config["Sorting"]["gridsearch_KS_params"])
             )  # get iterator of all possible param combinations
@@ -719,7 +747,7 @@ if __name__ == "__main__":
                 recording_list.append(preproc_recording)
                 # create a new config file for each parallel job
                 this_config = deepcopy(full_config)
-                this_config["Data"]["sorted_folder"] = tmp_sorted_folder
+                this_config["Sorting"]["sorted_folder"] = tmp_sorted_folder
                 # check for keys first
                 if "Th" in iParams[iW]:
                     this_config["KS"]["Th_learned"] = iParams[iW]["Th"][0]
@@ -730,6 +758,9 @@ if __name__ == "__main__":
                 this_config["KS"]["nearest_chans"] = min(
                     this_config["num_chans"], this_config["KS"]["nearest_chans"]
                 )  # do not let nearest_chans exceed the number of channels
+                this_config["KS"]["nearest_templates"] = min(
+                    this_config["num_chans"], this_config["KS"]["nearest_templates"]
+                )  # do not let nearest_templates exceed the number of channels
                 this_config["KS"]["torch_device"] = (
                     "cuda:" + torch_device_ids[iW] if is_available() else "cpu"
                 )
@@ -740,12 +771,11 @@ if __name__ == "__main__":
                 {
                     "sorter_name": "kilosort4",
                     "recording": recording_list[i],
-                    "output_folder": these_configs[i]["Data"]["sorted_folder"],
+                    "output_folder": these_configs[i]["Sorting"]["sorted_folder"],
                     **these_configs[i]["KS"],
                 }
                 for i in range(total_KS_jobs)
             ]
-
             run_KS_sorting(job_list, these_configs)
 
     # Print status and time elapsed

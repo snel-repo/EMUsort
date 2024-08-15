@@ -20,6 +20,7 @@ Data:
         - 0
 # Sorting parameters
 Sorting:
+    output_folder: # if None, will output into the path provided by the session_folder argument
     # GPU to use for kilosort, (a list of integers, e.g., [1,2,5,6])
     GPU_to_use: [0]
     # number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
@@ -56,8 +57,9 @@ KS:
     remove_chan_delays: true # this setting is added to KS4 for EMUsort
     batch_size: 60000
     nblocks: 0
-    Th_universal: 9
-    Th_learned: 8
+    Th_universal:
+    Th_learned:
+    Th_single_ch:
     do_CAR: false
     invert_sign: false
     nt: 61
@@ -71,12 +73,11 @@ KS:
     dminx: 32
     min_template_size: 10
     template_sizes: 5
-    nearest_chans: 8
+    nearest_chans: 10
     nearest_templates: 100
     templates_from_data: true
     n_templates: 9
     n_pcs: 9
-    Th_single_ch: 6
     acg_threshold: 0.2
     ccg_threshold: 0.25
     cluster_downsampling: 20
