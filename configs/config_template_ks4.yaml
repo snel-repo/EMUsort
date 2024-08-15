@@ -20,7 +20,7 @@ Data:
         - 0
 # Sorting parameters
 Sorting:
-    output_folder: # if None, will output into the path provided by the session_folder argument
+    output_folder: # if left blank, will output into the path provided by the session_folder argument
     # GPU to use for kilosort, (a list of integers, e.g., [1,2,5,6])
     GPU_to_use: [0]
     # number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
