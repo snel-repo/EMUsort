@@ -15,7 +15,7 @@
 
 ### Requirements
 
-- Currently, using a Linux-based OS is recommended. The code has been tested on Ubuntu. Windows is supported, but may require additional changes as specified below.
+- Currently, using a Linux-based OS is recommended. The code has been tested on Ubuntu. Windows is supported, but may require additional configuration steps as specified below. MacOS is not supported, but might work if it is macOS version >=12.3 and has an Apple silicon or AMD GPU, however, it is untested and tailored instructions are not provided.
 - GPUs with compute capability >=5.0 are supported
 - Nvidia Driver:
   - Linux: >=450.80.02

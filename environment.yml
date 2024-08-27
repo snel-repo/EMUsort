@@ -6,9 +6,9 @@ channels:
 dependencies:
   - cudatoolkit
   - cxx-compiler
+  - cython
   - h5py
   - hdbscan
-  - htop
   - ipympl
   - ipywidgets
   - joblib
@@ -22,12 +22,14 @@ dependencies:
   - pandas
   - pip
   - pybind11
-  - pyqt=5 
+  - pyqt=5
   - pyqt5-sip
   - pyqtwebengine
   - pyqtgraph
   - python=3.11 # phy gui makes py311 the maximum, due to imp dependency
   - pytorch
+  - torchvision
+  - torchaudio
   - ruamel.yaml
   - scikit-learn
   - scipy
@@ -35,7 +37,6 @@ dependencies:
   - xarray
   - zarr
   - pip:
-      # - git+https://github.com/SpikeInterface/spikeinterface.git@0.100.7 # use spikeinterface release tag from GitHub
-      - "-e ./sorting/spikeinterface" # install local spikeinterface for EMUsort
-      - "-e ./sorting/Kilosort4" # install local Kilosort4 for EMUsort
-      - git+https://github.com/cortex-lab/phy.git # latest version of phy from GitHub
+        - "-e ./sorting/spikeinterface" # install local spikeinterface for EMUsort
+        - "-e ./sorting/Kilosort4" # install local Kilosort4 for EMUsort
+        - git+https://github.com/cortex-lab/phy.git # latest version of phy from GitHub

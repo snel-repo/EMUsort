@@ -17,8 +17,7 @@ from copy import deepcopy
 # from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Pool
 from pathlib import Path
-from pdb import set_trace
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 import spikeinterface as si
@@ -31,22 +30,15 @@ from sklearn.model_selection import ParameterGrid
 from spikeinterface.exporters import export_to_phy
 from torch.cuda import is_available
 
-# import spikeinterface.comparison as sc
-# import spikeinterface.curation as scur
-# import spikeinterface.exporters as sexp
-# import spikeinterface.postprocessing as spost
-# import spikeinterface.qualitymetrics as sqm
-# import spikeinterface.widgets as sw
 
-# from probeinterface.plotting import plot_probe
-
-
-def create_config(repo_folder: Union[Path, str], session_folder: Union[Path, str]):
+def create_config(
+    repo_folder: Union[Path, str], session_folder: Union[Path, str], ks4: bool = False
+):
     """
     Copies a configuration template file from the repository folder to the session folder.
 
     This function ensures that both `repo_folder` and `session_folder` are Path objects.
-    It then copies the "emu_config_template.yaml" file from the `repo_folder` to the `session_folder`
+    It then copies the "config_template_emu.yaml" or "config_template_ks4.yaml" file from the `repo_folder` to the `session_folder`
     and renames it to "emu_config.yaml".
 
     Parameters:
@@ -60,8 +52,14 @@ def create_config(repo_folder: Union[Path, str], session_folder: Union[Path, str
     except TypeError as e:
         raise TypeError("Please provide valid folder paths.") from e
 
+    if ks4:
+        sort_type_str = "ks4"
+    else:
+        sort_type_str = "emu"
+
     shutil.copyfile(
-        repo_folder / "emu_config_template.yaml", session_folder / "emu_config.yaml"
+        repo_folder / "configs" / f"config_template_{sort_type_str}.yaml",
+        session_folder / f"{sort_type_str}_config.yaml",
     )
 
 
@@ -157,16 +155,6 @@ def load_ephys_data(
     Returns:
     - si.ChannelSliceRecording: A ChannelSliceRecording object containing the selected channels.
     """
-    # get all the channels across all groups, which will be sliced later (so as not to load more than once)
-    # channels = list(
-    #     set(
-    #         [
-    #             full_config["Group"]["emg_chan_list"][i]
-    #             for i in len(full_config["Group"]["emg_chan_list"])
-    #         ]
-    #     )
-    # )
-    # channels.sort()
     session_folder = config["Data"]["session_folder"]
     dataset_type = config["Data"]["dataset_type"]
     if dataset_type == "openephys":
@@ -232,21 +220,12 @@ def load_ephys_data(
             )
         loaded_recording = si.append_recordings(loaded_recording_list)
 
-    # Extract the channel IDs corresponding to the specified indices
-    # selected_channel_ids = loaded_recording.get_channel_ids()[channels]
-    # Slice the recording to include only the specified channels
-    # loaded_recording = loaded_recording.channel_slice(selected_channel_ids)
-    # # set a probe for the recording
-    # probe = create_probe(loaded_recording)
-    # loaded_recording.set_probe(probe)
-    # loaded_recording.set_channel_locations(probe.contact_positions)
-
     return loaded_recording
 
 
 def preprocess_ephys_data(
     recording_obj: si.ChannelSliceRecording, this_config: dict, iGroup: Union[int]
-) -> si.ChannelSliceRecording:
+) -> Union[si.ChannelSliceRecording, si.FrameSliceRecording]:
     """
     Preprocesses the electrophysiological data based on the specified configuration.
 
@@ -257,12 +236,24 @@ def preprocess_ephys_data(
     Returns:
     - si.ChannelSliceRecording: The preprocessed ChannelSliceRecording object.
     """
+    time_range_is_disabled = (
+        this_config["Data"]["time_range"][0] == 0
+        and this_config["Data"]["time_range"][1] == 0
+    )
+    assert time_range_is_disabled or (
+        this_config["Data"]["time_range"][0] < this_config["Data"]["time_range"][1]
+    ), "First element of time_range must be less than the second element."
+
     # check which recordings to use and whether to call concatenate_emg_data
     if this_config["Data"]["emg_recordings"][0] == "all":
         emg_recordings_to_use = np.arange(recording_obj.get_num_segments())
     else:
         emg_recordings_to_use = np.array(this_config["Data"]["emg_recordings"])
 
+    if len(emg_recordings_to_use) > 1 and not time_range_is_disabled:
+        raise ValueError(
+            "Time range must be disabled if concatenating recordings (i.e., time_range: [0, 0])."
+        )
     # concatenate the recordings if it's the first sort group, otherwise simply load it from last iteration
     if len(emg_recordings_to_use) > 1 and iGroup == 0:
         loaded_recording = concatenate_emg_data(
@@ -282,11 +273,27 @@ def preprocess_ephys_data(
         this_config["Group"]["emg_chan_list"][iGroup]
     ]
     # Slice the recording to include only the specified channels
-    loaded_recording = loaded_recording.channel_slice(selected_channel_ids)
+    sliced_recording = loaded_recording.channel_slice(selected_channel_ids)
+    if not time_range_is_disabled:
+        # Slice the recording to include only the specified time range
+        sliced_recording = sliced_recording.frame_slice(
+            start_frame=int(
+                round(
+                    this_config["Data"]["time_range"][0]
+                    * loaded_recording.get_sampling_frequency()
+                )
+            ),
+            end_frame=int(
+                round(
+                    this_config["Data"]["time_range"][1]
+                    * loaded_recording.get_sampling_frequency()
+                )
+            ),
+        )
 
     # Apply bandpass filter to the EMG data
     recording_filtered = spre.bandpass_filter(
-        loaded_recording,
+        sliced_recording,
         freq_min=this_config["Data"]["emg_passband"][0],
         freq_max=this_config["Data"]["emg_passband"][1],
     )
@@ -295,12 +302,35 @@ def preprocess_ephys_data(
     if isinstance(remove_bad_emg_chans, bool):
         bad_channel_ids, _ = spre.detect_bad_channels(recording_filtered, method="mad")
     elif isinstance(remove_bad_emg_chans, str):
+        probe = create_probe(recording_filtered)
+        recording_filtered = recording_filtered.set_probe(probe)
+        # input can be either "mad" or "coherence+psd", but users may input mad# where # is a number
+        # setting the threshold
+        numeric_idxs = np.nonzero([i.isdigit() for i in remove_bad_emg_chans])[0]
+        num_digits = len(numeric_idxs)
+        if num_digits > 0:
+            if num_digits > 1:
+                assert (
+                    np.diff(numeric_idxs).all() == 1
+                ), f"Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. If using a threshold, it must be a number after the method string."
+            method_str = remove_bad_emg_chans[: numeric_idxs[0]]
+            assert (
+                method_str != "coherence+psd"
+            ), f'Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. "coherence+psd" method does not take a threshold value.'
+            threshold = int(remove_bad_emg_chans[numeric_idxs[0] :])
+        else:
+            method_str = remove_bad_emg_chans
+            threshold = 5
+        if method_str not in ["coherence+psd", "std", "mad"]:
+            raise ValueError(
+                f'remove_bad_emg_chans method string must be either "coherence+psd", "std", "mad", "std#", or "mad#" where # is a number to set the threshold, but got "{remove_bad_emg_chans}".'
+            )
         bad_channel_ids, _ = spre.detect_bad_channels(
-            recording_filtered, method=remove_bad_emg_chans
+            recording_filtered, method=method_str, std_mad_threshold=threshold
         )
     elif isinstance(remove_bad_emg_chans, (list, np.ndarray)):
         raise TypeError(
-            'Elements of this_config["Group"]["remove_bad_emg_chans"] type should either be bool or str'
+            f'Elements of this_config["Group"]["remove_bad_emg_chans"] type should either be bool or str, but got {type(remove_bad_emg_chans)}.'
         )
     else:
         bad_channel_ids = None
@@ -340,7 +370,21 @@ def concatenate_emg_data(
         si.ChannelSliceRecording, se.OpenEphysBinaryRecordingExtractor
     ],
     this_config: dict,
-) -> si.ChannelSliceRecording:
+) -> Union[si.ChannelSliceRecording, se.OpenEphysBinaryRecordingExtractor]:
+    """
+    Concatenates the specified EMG recordings and saves the concatenated data to the session folder.
+    Results are saved in the "concatenated_data" folder within the session folder. If the
+    concatenated data already exists and the Data section of the configuration file has not changed,
+    data will be loaded instead of recomputed.
+
+    Parameters:
+    - session_folder: Union[Path, str] - The path to the session folder containing the electrophysiological data.
+    - emg_recordings: Union[list, np.ndarray] - A list or NumPy array containing the indices of the EMG recordings to concatenate.
+    - recording_object: Union[si.ChannelSliceRecording, se.OpenEphysBinaryRecordingExtractor] - The ChannelSliceRecording or OpenEphysBinaryRecordingExtractor object containing the electrophysiological data.
+
+    Returns:
+    - Union[si.ChannelSliceRecording, se.OpenEphysBinaryRecordingExtractor]: The concatenated recording object.
+    """
 
     def concat_and_save(concat_data_path: Path):
         try:
@@ -379,7 +423,7 @@ def concatenate_emg_data(
             this_config_dict = path_to_str_recursive(
                 dict(this_config)
             )  # Cast to dictionary
-            if not dicts_match(last_config_dict['Data'], this_config_dict['Data']):
+            if not dicts_match(last_config_dict["Data"], this_config_dict["Data"]):
                 print(
                     "Data section of configuration file has changed since last run, re-running concatenation..."
                 )
@@ -408,16 +452,36 @@ def concatenate_emg_data(
     return recording_concatenated
 
 
-def extract_sorting_result(sorting, ii):
+def extract_sorting_result(sorting, this_config, ii):
+    """
+    Parallel-friendly function to extract and save the sorting results to the specified folder.
+
+    Parameters:
+    - sorting: KiloSortSortingExtractor - The sorting extractor object containing the spike sorting results.
+    - ii: int - The index of the sorting job in the job list.
+
+    Returns:
+    - None
+    """
     # Save sorting results by exporting to Phy format
-    waveforms_folder = (
-        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output" / "waveforms"
-    )
-    phy_folder = (
-        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output" / "phy"
+    waveforms_folder = Path(this_config["Sorting"]["sorted_folder"]) / "waveforms"
+    phy_folder = Path(this_config["Sorting"]["sorted_folder"]) / "phy"
+    # get nt size from the sorting object, which is the width of the waveforms
+    sampling_frequency = this_config["Data"]["emg_sampling_rate"]
+    nt = this_config["KS"]["nt"]
+    ms_buffer = nt / sampling_frequency * 1000 / 2
+    print(
+        f"Worker {ii} extracting waveforms with nt={nt} at fs={sampling_frequency} Hz (ms_before=ms_after={np.round(ms_buffer, 3)} ms)."
     )
     try:
-        we = si.extract_waveforms(job_list[ii]["recording"], sorting, waveforms_folder)
+        we = si.extract_waveforms(
+            job_list[ii]["recording"],
+            sorting,
+            waveforms_folder,
+            ms_before=ms_buffer,
+            ms_after=ms_buffer,
+            overwrite=True,
+        )
     except ValueError as e:
         print("Error extracting waveforms:", e)
         import spikeinterface.curation as scur
@@ -428,7 +492,7 @@ def extract_sorting_result(sorting, ii):
 
         # loaded_recording.set_probe(probe)
         we = si.extract_waveforms(
-            remove_excess_spikes_recording, sorting, waveforms_folder
+            remove_excess_spikes_recording, sorting, waveforms_folder, overwrite=True
         )
 
     export_to_phy(
@@ -437,11 +501,24 @@ def extract_sorting_result(sorting, ii):
         compute_pc_features=False,
         copy_binary=True,
         use_relative_path=True,
+        verbose=False,
     )
-    # move all phy files into sorter_output folder, overwriting existing files
+
+    # move all sorter_output files into sorted_folder, then delete it
+    shutil.copytree(
+        Path(this_config["Sorting"]["sorted_folder"]) / "sorter_output",
+        Path(this_config["Sorting"]["sorted_folder"]),
+        dirs_exist_ok=True,
+    )
+    shutil.rmtree(
+        Path(this_config["Sorting"]["sorted_folder"]) / "sorter_output",
+        ignore_errors=True,
+    )
+
+    # move all phy files into sorted_folder, overwriting any existing duplicate files, then delete it
     shutil.copytree(
         phy_folder,
-        Path(these_configs[ii]["Data"]["sorted_folder"]) / "sorter_output",
+        Path(this_config["Sorting"]["sorted_folder"]),
         dirs_exist_ok=True,
     )
     shutil.rmtree(phy_folder, ignore_errors=True)
@@ -449,9 +526,9 @@ def extract_sorting_result(sorting, ii):
     # move results into file folder for storage
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
     Th_this_config = (
-        these_configs[ii]["KS"]["Th_learned"],
-        these_configs[ii]["KS"]["Th_universal"],
-        tuple(these_configs[ii]["KS"]["Th_single_ch"]),
+        this_config["KS"]["Th_learned"],
+        this_config["KS"]["Th_universal"],
+        tuple(this_config["KS"]["Th_single_ch"]),
     )
     params_suffix = (
         f"Th_{Th_this_config[0]},{Th_this_config[1]}_spkTh_{Th_this_config[2]})"
@@ -461,31 +538,52 @@ def extract_sorting_result(sorting, ii):
     #     [
     #         f"{key}-{val}"
     #         for key, val in iParams[ii].items()
-    #         if key in these_configs[ii]["Sorting"]["gridsearch_KS_params"]
+    #         if key in this_config["Sorting"]["gridsearch_KS_params"]
     #     ]
     # )
-    final_filename = f'{str(Path(these_configs[ii]["Data"]["sorted_folder"])).split("_worker")[0]}_{time_stamp_us}_{params_suffix}'
+    final_filename = f'{str(Path(this_config["Sorting"]["sorted_folder"])).split("_worker")[0]}_{time_stamp_us}_{params_suffix}'
     # remove whitespace and parens from the filename
-    final_filename = final_filename.replace(" ", "")
-    final_filename = final_filename.replace("(", "")
-    final_filename = final_filename.replace(")", "")
+    # final_filename = final_filename.replace(" ", "")
+    # final_filename = final_filename.replace("(", "")
+    # final_filename = final_filename.replace(")", "")
+    # remove whitespace and parens from the stem of the filename
+    final_filename = Path(final_filename)
+    final_filename = final_filename.with_name(final_filename.name.replace(" ", ""))
+    final_filename = final_filename.with_name(final_filename.name.replace("(", ""))
+    final_filename = final_filename.with_name(final_filename.name.replace(")", ""))
+    final_filename = str(final_filename)
+    # remove trailing comma from the filename
+    if final_filename[-1] == ",":
+        final_filename = final_filename[:-1]
 
-    # simply rename the folder
-    shutil.move(these_configs[ii]["Data"]["sorted_folder"], final_filename)
+    # rename the folder to preserve the latest sorting results in the sorted_group#_worker# folder
+    # also make a new sorter_output_HHMMSSffffff folder with a timestamp
+    shutil.move(this_config["Sorting"]["sorted_folder"], final_filename)
+    # add entry to the config file for the final folder
+    # these_configs[ii]["Data"]["final_folder"] = final_filename
+    # print for user to copy and paste into terminal if desired
+    print(f"\nRun:\nphy template-gui {final_filename}/params.py\n")
 
 
 def run_KS_sorting(job_list, these_configs):
-    # job_list is of structure:
+    """
+    Run Kilosort4 spike sorting on the specified recordings and save the results.
+
+    Parameters:
+    - job_list: list - A list of dictionaries containing the job parameters for each sorting job.
+    - these_configs: list - A list of dictionaries containing the configuration parameters for each sorting job.
+
+    Returns:
+    - None
+    """
+    ## job_list is of below structure:
     # job_list = [
     #     {
     #         "sorter_name": "kilosort4",
     #         "recording": recording_list[i],
-    #         "output_folder": these_configs[i]["Data"]["sorted_folder"],
+    #         "output_folder": these_configs[i]["Sorting"]["sorted_folder"],
     #         **this_config["KS"],
-    # update the KS parameters in the config file using the iParams values
-
-    # this_config["Group"]["emg_chan_list"] = np.arange(this_config["num_chans"])
-    # loaded_recording.set_channel_locations(probe.contact_positions)
+    #     }
 
     # Run spike sorting
     sortings = ss.run_sorter_jobs(
@@ -494,12 +592,23 @@ def run_KS_sorting(job_list, these_configs):
         engine_kwargs={"n_jobs": these_configs[0]["Sorting"]["num_KS_jobs"]},
         return_output=True,
     )
-    # do this in parallel using Pool
-    with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
-        pool.starmap(extract_sorting_result, zip(sortings, range(len(job_list))))
-    # do not do in parallel, because extract_waveforms consumes all CPUs for a single job
-    # for ii, sorting in enumerate(sortings):
-    #     extract_sorting_result(sorting, ii)
+
+    # Now extract and write the sorting results to each sorted_folder
+    if these_configs[0]["Sorting"]["num_KS_jobs"] > 1:
+        try:
+            # do this in parallel using Pool
+            with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
+                pool.starmap(
+                    extract_sorting_result,
+                    zip(sortings, these_configs, range(len(job_list))),
+                )
+        except (
+            NameError
+        ):  # this is to catch a Windows error where these_configs is not defined in the worker
+            for ii, sorting in enumerate(sortings):
+                extract_sorting_result(sorting, these_configs[ii], ii)
+    else:
+        extract_sorting_result(sortings[0], these_configs[0], 0)
 
 
 if __name__ == "__main__":
@@ -518,144 +627,83 @@ if __name__ == "__main__":
     parser.add_argument(  # ability to reset the config file
         "--reset-config",
         action="store_true",
-        help="Reset the configuration file to the default template",
+        help="Reset the configuration file to the default EMUsort template",
+    )
+    parser.add_argument(  # ability to reset the config file for KS4 default settings
+        "--reset-config-ks4",
+        action="store_true",
+        help="Reset the configuration file to the default Kilosort4 template",
     )
     parser.add_argument(
         "-s", "--sort", action="store_true", help="Perform spike sorting"
     )
+    # parser.add_argument(
+    #     "-p",
+    #     "--phy",
+    #     action="store_true",
+    #     help="Open Phy GUI for the specified folder datestring. Defaults to latest folder without datestring.",
+    # )
 
     args = parser.parse_args()
 
-    yaml = YAML()
     # Generate, reset, or load config file
-    config_file_path = Path(args.folder).joinpath("emu_config.yaml")
+    config_file_path = (
+        Path(args.folder).expanduser().resolve().joinpath("emu_config.yaml")
+    )
     # if the config doesn't exist or user wants to reset, load the config template
-    if not config_file_path.exists() or args.reset_config:
+    if not config_file_path.exists() or args.reset_config or args.reset_config_ks4:
         print(f"Generating config file from default template: \n{config_file_path}\n")
-        create_config(Path(__file__).parent, Path(args.folder))
-    # # Load config file
-    # with open(config_file_path) as f:
-    #     full_config = yaml.load(f)
-    #     if not args.reset_config:
-    #         print("WARNING: Configuration file not found, generating a new one...")
-    #         create_config(Path(__file__).parent, Path(args.folder))
-    #         # insert the default KS parameters into the config file, under the section "KS"
-    #         # with open(config_file_path, "r") as f:
-    #         #     full_config = yaml.load(f)
-    #         #     KS_config = (
-    #         #         ss.Kilosort4Sorter.default_params()
-    #         #     )  # Load default KS parameters
-    #         #     full_config["KS"] = (
-    #         #         KS_config  # insert the KS parameters into the config file
-    #         #     )
-    #         with open(config_file_path, "w") as f:
-    #             yaml.dump(full_config, f)
+        create_config(
+            Path(__file__).parent,
+            Path(args.folder).expanduser().resolve(),
+            ks4=args.reset_config_ks4,
+        )
 
-    # open text editor to edit the configuration file if desired
+    # open text editor to validate or edit the configuration file if desired
     if args.config:
         subprocess.run(["nano", config_file_path])
 
+    # Load the configuration file
+    yaml = YAML()
     full_config = yaml.load(config_file_path)
 
-    # Prepare common configuration file
-    # full_config.update(
-    #     {
-    #         "GPU_to_use": np.array(full_config["Sorting"]["GPU_to_use"], dtype=int),
-    #         "num_KS_jobs": int(full_config["Sorting"]["num_KS_jobs"]),
-    #         "session_folder": Path(args.folder),
-    #         "repo_folder": Path(__file__).parent,
-    #         "emg_recordings": (
-    #             np.array(full_config["Data"]["emg_recordings"], dtype=int)
-    #             if type(full_config["Data"]["emg_recordings"][0]) != str
-    #             else full_config["Data"]["emg_recordings"]
-    #         ),
-    #         "emg_passband": np.array(full_config["Data"]["emg_passband"], dtype=float),
-    #         "emg_sampling_rate": float(full_config["Data"]["emg_sampling_rate"]),
-    #         # "num_KS_components": int(full_config["Sorting"]["num_KS_components"]),
-    #         "time_range": np.array(full_config["Data"]["time_range"], dtype=float),
-    #         # "emg_analog_chan": int(full_config["Data"]["emg_analog_chan"]),
-    #     }
-    # )
     # Prepare common configuration file, accounting for section titles, Data, Sorting, and Group
     full_config["Data"].update(
         {
             "repo_folder": Path(__file__).parent,
-            "session_folder": Path(args.folder),
-            # "emg_recordings": (
-            #     np.array(full_config["Data"]["emg_recordings"], dtype=int)
-            #     if type(full_config["Data"]["emg_recordings"][0]) != str
-            #     else full_config["Data"]["emg_recordings"]
-            # ),
-            # "emg_passband": np.array(full_config["Data"]["emg_passband"], dtype=float),
-            # "emg_sampling_rate": float(full_config["Data"]["emg_sampling_rate"]),
-            # "time_range": np.array(full_config["Data"]["time_range"], dtype=float),
+            "session_folder": Path(args.folder).expanduser().resolve(),
         }
     )
-    # full_config["Sorting"].update(
-    #     {
-    #         "GPU_to_use": np.array(full_config["Sorting"]["GPU_to_use"], dtype=int),
-    #         "num_KS_jobs": int(full_config["Sorting"]["num_KS_jobs"]),
-    #         "do_KS_param_gridsearch": int(full_config["Sorting"]["do_KS_param_gridsearch"]),
-    #         "gridsearch_KS_params": full_config["Sorting"]["gridsearch_KS_params"],
-    #     }
-    # )
-    # full_config["Group"].update(
-    #     {
-    #         "emg_chan_list": [
-    #             np.array(chan_range, dtype=int)
-    #             for chan_range in full_config["Group"]["emg_chan_list"]
-    #         ],
-    #         "remove_bad_emg_chans": [
-    #             np.array(bad_chans, dtype=int)
-    #             for bad_chans in full_config["Group"]["remove_bad_emg_chans"]
-    #         ],
-    #         "remove_chan_delays": [
-    #             np.array(delays, dtype=int)
-    #             for delays in full_config["Group"]["remove_chan_delays"]
-    #         ],
-    #     }
-    # )
 
-    # below are overrides to KS defaults which improve performance with EMG data
-    full_config["KS"].update(
-        {
-            "nblocks": int(0),
-            "nearest_chans": max(
-                [
-                    len(full_config["Group"]["emg_chan_list"][i])
-                    for i in range(len(full_config["Group"]["emg_chan_list"]))
-                ]
-            ),
-            "do_correction": False,
-            "do_CAR": False,
-        }
-    )
+    # below are checks of the configuration file to avoid downstream errors
+    assert full_config["KS"]["nblocks"] == False, "nblocks must be False for EMUsort"
+    assert (
+        full_config["KS"]["do_correction"] == False
+    ), "do_correction must be False for EMUsort"
+    assert full_config["KS"]["do_CAR"] == False, "do_CAR must be False for EMUsort"
 
     # EMG Preprocessing and Spike Sorting
     if args.sort:
 
         # load data from the session folder
         recording = load_ephys_data(full_config)
-
-        # Setting GPU Environment Variables
-        # GPU_str = ",".join([str(i) for i in full_config["Sorting"]["GPU_to_use"]])
+        # Setting GPU ordering for parallel jobs to match nvidia-smi and nvitop
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        # os.environ["CUDA_VISIBLE_DEVICES"] = GPU_str
+        # ensure that the output folder is set to the session folder if not specified
+        if full_config["Sorting"]["output_folder"] is None:
+            full_config["Sorting"]["output_folder"] = Path(
+                full_config["Data"]["session_folder"]
+            )
+        # loop through each group of EMG channels to sort independently
         for iGroup, emg_chan_list in enumerate(full_config["Group"]["emg_chan_list"]):
             preproc_recording = preprocess_ephys_data(recording, full_config, iGroup)
             grp_zfill_amount = len(str(len(full_config["Group"]["emg_chan_list"])))
             this_group_sorted_folder = (
-                Path(full_config["Data"]["session_folder"])
-                / f"sorted_group_{str(iGroup).zfill(grp_zfill_amount)}"
+                Path(full_config["Sorting"]["output_folder"]).expanduser().resolve()
+                / f'{Path(full_config["Data"]["session_folder"]).name}_group{str(iGroup).zfill(grp_zfill_amount)}'
             )
             print(f"Recording information: {preproc_recording}")
-            full_config["sort_group"] = iGroup
-            # full_config["emg_chan_map_file"] = (
-            #     Path(full_config["Data"]["repo_folder"])
-            #     / "channel_maps"
-            #     / full_config["Group"]["emg_chan_map_file"][iGroup]
-            # )
-            # full_config["num_chans"] = len(emg_chan_list)
+            # full_config["sort_group"] = iGroup
             iParams = list(
                 ParameterGrid(full_config["Sorting"]["gridsearch_KS_params"])
             )  # get iterator of all possible param combinations
@@ -665,7 +713,7 @@ if __name__ == "__main__":
 
             # create new folders if running in parallel
             total_KS_jobs = len(iParams)
-            # if full_config["Sorting"]["num_KS_jobs"] > 1:
+
             worker_ids = np.arange(total_KS_jobs)
             torch_device_ids = [
                 str(
@@ -676,9 +724,6 @@ if __name__ == "__main__":
                 for j in worker_ids
             ]
             # ensure proper configuration for parallel jobs
-            # assert full_config["Sorting"]["num_KS_jobs"] <= len(
-            #     full_config["Sorting"]["GPU_to_use"]
-            # ), "Number of parallel jobs must be less than or equal to number of GPUs"
             if full_config["Sorting"]["num_KS_jobs"] > 1:
                 assert (
                     full_config["Sorting"]["do_KS_param_gridsearch"] == 1
@@ -686,6 +731,7 @@ if __name__ == "__main__":
             # create new folder for each parallel job to store results temporarily
             these_configs = []
             recording_list = []
+            # loop through each parallel job and create separate config files for each
             for iW in worker_ids:
                 # create new folder for each parallel job
                 zfill_amount = len(str(full_config["Sorting"]["num_KS_jobs"]))
@@ -700,7 +746,7 @@ if __name__ == "__main__":
                 recording_list.append(preproc_recording)
                 # create a new config file for each parallel job
                 this_config = deepcopy(full_config)
-                this_config["Data"]["sorted_folder"] = tmp_sorted_folder
+                this_config["Sorting"]["sorted_folder"] = tmp_sorted_folder
                 # check for keys first
                 if "Th" in iParams[iW]:
                     this_config["KS"]["Th_learned"] = iParams[iW]["Th"][0]
@@ -708,83 +754,28 @@ if __name__ == "__main__":
                 if "spkTh" in iParams[iW]:
                     this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
                 this_config["num_chans"] = preproc_recording.get_num_channels()
-                this_config["KS"]["nearest_chans"] = this_config["num_chans"]
+                this_config["KS"]["nearest_chans"] = min(
+                    this_config["num_chans"], this_config["KS"]["nearest_chans"]
+                )  # do not let nearest_chans exceed the number of channels
+                this_config["KS"]["nearest_templates"] = min(
+                    this_config["num_chans"], this_config["KS"]["nearest_templates"]
+                )  # do not let nearest_templates exceed the number of channels
                 this_config["KS"]["torch_device"] = (
                     "cuda:" + torch_device_ids[iW] if is_available() else "cpu"
                 )
                 # print(this_config["KS"]["torch_device"])
                 these_configs.append(this_config)
-            # create spikeinterface job_list similar to below example
-            # here we run 2 sorters on 2 different recordings = 4 jobs
-            # recording = ...
-            # another_recording = ...
-            # job_list = [
-            #   {'sorter_name': 'tridesclous', 'recording': recording, 'output_folder': 'folder1','detect_threshold': 5.},
-            #   {'sorter_name': 'tridesclous', 'recording': another_recording, 'output_folder': 'folder2', 'detect_threshold': 5.},
-            #   {'sorter_name': 'herdingspikes', 'recording': recording, 'output_folder': 'folder3', 'clustering_bandwidth': 8., 'docker_image': True},
-            #   {'sorter_name': 'herdingspikes', 'recording': another_recording, 'output_folder': 'folder4', 'clustering_bandwidth': 8., 'docker_image': True},
-            # ]
-            # # run in parallel according to the job_list
-            # must split the job_list into smaller chunks divided by the number of parallel jobs
-            # sortings = run_sorter_jobs(job_list=job_list, engine='joblib', engine_kwargs={'n_jobs': 2})
 
             job_list = [
                 {
                     "sorter_name": "kilosort4",
                     "recording": recording_list[i],
-                    "output_folder": these_configs[i]["Data"]["sorted_folder"],
+                    "output_folder": these_configs[i]["Sorting"]["sorted_folder"],
                     **these_configs[i]["KS"],
                 }
                 for i in range(total_KS_jobs)
             ]
-
-            # split job_list according to number of parallel jobs
-            # job_list_split = np.array_split(
-            #     job_list, full_config["Sorting"]["num_KS_jobs"]
-            # )
-
-            # split iParams according to number of parallel jobs
-            # iParams_split = np.array_split(
-            #     iParams, full_config["Sorting"]["num_KS_jobs"]
-            # )
-            # # run parallel jobs
-            # with ProcessPoolExecutor() as executor:
-            #     executor.map(
-            #         run_KS_sorting,
-            #         iParams_split,
-            #         these_configs,
-            #         [recording] * full_config["Sorting"]["num_KS_jobs"],
-            #     )
             run_KS_sorting(job_list, these_configs)
-            # else:
-            # this_config = full_config.copy()
-            # this_config["Data"]["sorted_folder"] = Path(
-            #     str(full_config["Data"]["sorted_folder"]) + "0"
-            # )
-            # if Path(this_config["Data"]["sorted_folder"]).exists():
-            #     shutil.rmtree(
-            #         this_config["Data"]["sorted_folder"], ignore_errors=True
-            #     )
-            # shutil.copytree(
-            #     full_config["Data"]["sorted_folder"], this_config["Data"]["sorted_folder"]
-            # )
-            # # check for keys first
-            # if "Th" in iParams[0]:
-            #     this_config["KS"]["Th_learned"] = iParams[0]["Th"][0]
-            #     this_config["KS"]["Th_universal"] = iParams[0]["Th"][1]
-            # if "spkTh" in iParams[0]:
-            #     this_config["KS"]["Th_single_ch"] = iParams[0]["spkTh"]
-            # this_config["num_chans"] = recording.get_num_channels()
-            # this_config["KS"]["nearest_chans"] = this_config["num_chans"]
-            # # Run spike sorting
-            # job_list = [
-            #     {
-            #         "sorter_name": "kilosort4",
-            #         "recording": recording,
-            #         "output_folder": this_config["Data"]["sorted_folder"],
-            #         **this_config["KS"],
-            #     }
-            # ]
 
     # Print status and time elapsed
     print("Pipeline finished! You've earned a break.")
@@ -794,5 +785,16 @@ if __name__ == "__main__":
         f"Time elapsed: {strfdelta(time_elapsed, '{hours} hours, {minutes} minutes, {seconds} seconds')}"
     )
 
-    # Reset terminal mode
-    subprocess.run(["stty", "sane"])
+    # if args.phy:
+    #     # make sure only one sort was performed
+    #     if len(these_configs) > 1 or len(full_config["Group"]["emg_chan_list"]) > 1:
+    #         print(
+    #             "Multiple sorts were performed, ignoring -p/--phy flag. Phy command can only be used for one sort at a time."
+    #         )
+    #         args.phy = False
+
+    #     if args.phy:
+    #         # open Phy GUI for this final folder
+    #         subprocess.run(
+    #             ["phy", "template-gui", these_configs[0]["Data"]["final_folder"]]
+    #         )

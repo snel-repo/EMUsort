@@ -1,0 +1,92 @@
+
+---
+## EMUsort configuration file to emulate Kilosort4 settings
+# Dataset parameters
+# provide information specific to the dataset you want to sort
+Data:
+    dataset_type: 'openephys' # can be 'openephys', 'nwb', 'intan' or 'binary'
+    # below three settings are for when 'binary' dataset_type is used
+    emg_sampling_rate: 30000 # sampling rate of the emg data in binary file(s)
+    emg_num_channels: 8 # number of channels in the recording in binary file(s)
+    emg_dtype: 'int16' # data type of the emg data in binary file(s)
+    # specify recordings to process (can be [all] or a list of integers, e.g., [0,1,2,5,6])
+    # chosen recordings will be concatenated prior to sorting
+    emg_recordings: [0]
+    # set bandpass filter settings for emg data
+    emg_passband:
+        - 250
+        - 5000
+    time_range: # can be used to slice along time, set start and end to 0 to use all data
+        - 0
+        - 0
+# Sorting parameters
+Sorting:
+    output_folder: # if left blank, will output into the path provided by the session_folder argument
+    # GPU to use for kilosort, (a list of integers, e.g., [1,2,5,6])
+    GPU_to_use: [0]
+    # number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
+    # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is true
+    num_KS_jobs: 1
+    # when do_KS_param_gridsearch is false, only the first rows of each parameter are used (default)
+    do_KS_param_gridsearch: false
+    gridsearch_KS_params: # 
+        Th: # in format [Th_learned, Th_universal] for each element
+            - [9, 8]
+            - [10, 4]
+            - [7, 3]
+            - [5, 2]
+            - [2, 1]
+        spkTh: # Th_single_ch
+            - [6]
+            - [3]
+            - [4.5]
+            - [7.5]
+            - [9]
+# Group-specific parameters
+# channel groups are sorted separately, rows of each parameter define settings for each group
+Group:
+    emg_chan_list: # List of channels to sort, zero-indexed
+        - [0,1,2,3,4,5,6,7]
+        #- [8,9,10,11,12,13,14] # this row defines parameters for the second group
+    remove_bad_emg_chans: # false to disable, or a string for the method. Can be 'coherence+psd', 'mad', 'std', 'mad#', or 'std#', where # is the cutoff threshold (true defaults to 'mad5'). See spikeinterface's detect_bad_channels() method for more info.
+        - false
+        #- true # if true, the second group would have bad chans removed by 'mad' method
+# Kilosort parameters
+# nearest_chans and torch_device may be modified in emusort.py to avoid errors
+KS:
+    remove_chan_delays: false # this setting is added to KS4 for EMUsort, will apply channel delays to optimally align MUAPs
+    remove_spike_outliers: false # this setting is added to KS4 for EMUsort, will use HDBSCAN to remove any outlier isolated spikes during initialization
+    batch_size: 60000
+    nblocks: 0
+    Th_universal:
+    Th_learned:
+    Th_single_ch:
+    do_CAR: true
+    invert_sign: false
+    nt: 61
+    artifact_threshold:
+    nskip: 25
+    whitening_range: 32
+    binning_depth: 5
+    sig_interp: 20
+    nt0min:
+    dmin:
+    dminx: 32
+    min_template_size: 10
+    template_sizes: 5
+    nearest_chans: 10
+    nearest_templates: 100
+    templates_from_data: true
+    n_templates: 6
+    n_pcs: 6
+    acg_threshold: 0.2
+    ccg_threshold: 0.25
+    cluster_downsampling: 20
+    cluster_pcs: 64
+    duplicate_spike_bins: 15
+    do_correction: false
+    keep_good_only: false
+    save_extra_kwargs: false
+    skip_kilosort_preprocessing: false
+    scaleproc:
+    torch_device: auto
