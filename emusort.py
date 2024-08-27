@@ -17,8 +17,7 @@ from copy import deepcopy
 # from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Pool
 from pathlib import Path
-from pdb import set_trace
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 import spikeinterface as si
@@ -60,7 +59,7 @@ def create_config(
 
     shutil.copyfile(
         repo_folder / "configs" / f"config_template_{sort_type_str}.yaml",
-        session_folder / "emu_config.yaml",
+        session_folder / f"{sort_type_str}_config.yaml",
     )
 
 
@@ -251,7 +250,7 @@ def preprocess_ephys_data(
     else:
         emg_recordings_to_use = np.array(this_config["Data"]["emg_recordings"])
 
-    if len(emg_recordings_to_use) > 1 and time_range_is_disabled:
+    if len(emg_recordings_to_use) > 1 and not time_range_is_disabled:
         raise ValueError(
             "Time range must be disabled if concatenating recordings (i.e., time_range: [0, 0])."
         )

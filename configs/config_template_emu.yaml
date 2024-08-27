@@ -54,7 +54,8 @@ Group:
 # Kilosort parameters
 # nearest_chans and torch_device may be modified in emusort.py to avoid errors
 KS:
-    remove_chan_delays: true # this setting is added to KS4 for EMUsort
+    remove_chan_delays: true # this setting is added to KS4 for EMUsort, will apply channel delays to optimally align MUAPs
+    remove_spike_outliers: true # this setting is added to KS4 for EMUsort, will use HDBSCAN to remove any outlier isolated spikes during initialization
     batch_size: 60000
     nblocks: 0
     Th_universal:
