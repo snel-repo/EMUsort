@@ -1,4 +1,3 @@
-
 ---
 ## EMUsort configuration file to emulate Kilosort4 settings
 # Dataset parameters
@@ -22,26 +21,27 @@ Data:
 # Sorting parameters
 Sorting:
     output_folder: # if left blank, will output into the path provided by the session_folder argument
-    # GPU to use for kilosort, (a list of integers, e.g., [1,2,5,6])
+    # GPU to use for kilosort, (a list of integers, e.g., [0,1,2,5,6])
     GPU_to_use: [0]
-    # number of Kilosort jobs to run at once (must be <= number of GPUs, will run in parallel if >1)
+    # number of Kilosort jobs to be distributed across all chosen GPUs (will run in parallel if >1)
     # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is true
     num_KS_jobs: 1
     # when do_KS_param_gridsearch is false, only the first rows of each parameter are used (default)
-    do_KS_param_gridsearch: false
+    do_KS_param_gridsearch: false # set to true for gridsearch
     gridsearch_KS_params: # 
         Th: # in format [Th_learned, Th_universal] for each element
-            - [9, 8]
+            - [9, 8] # default setting for Kilosort4
             - [10, 4]
             - [7, 3]
             - [5, 2]
             - [2, 1]
-        spkTh: # Th_single_ch
-            - [6]
+        spkTh: # Th_single_ch (STDs)
+            - [6] # default setting for Kilosort4
             - [3]
             - [4.5]
             - [7.5]
             - [9]
+
 # Group-specific parameters
 # channel groups are sorted separately, rows of each parameter define settings for each group
 Group:
@@ -54,8 +54,8 @@ Group:
 # Kilosort parameters
 # nearest_chans and torch_device may be modified in emusort.py to avoid errors
 KS:
-    remove_chan_delays: false # this setting is added to KS4 for EMUsort, will apply channel delays to optimally align MUAPs
-    remove_spike_outliers: false # this setting is added to KS4 for EMUsort, will use HDBSCAN to remove any outlier isolated spikes during initialization
+    remove_chan_delays: false # EMUsort setting, will apply channel delays to optimally align MUAPs
+    remove_spike_outliers: false # EMUsort setting, will use HDBSCAN to remove outlier isolated spikes during initialization
     batch_size: 60000
     nblocks: 0
     Th_universal:

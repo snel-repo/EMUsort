@@ -27,21 +27,21 @@ Sorting:
     # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is true
     num_KS_jobs: 1
     # when do_KS_param_gridsearch is false, only the first rows of each parameter are used (default)
-    do_KS_param_gridsearch: false
+    do_KS_param_gridsearch: false # set to true for gridsearch
     gridsearch_KS_params: # 
         Th: # in format [Th_learned, Th_universal] for each element
-            - [9, 8]
+            - [9, 8] # default setting for EMUsort
             - [10, 4]
             - [7, 3]
             - [5, 2]
             - [2, 1]
-        spkTh: # Th_single_ch
-            - [6]
-            - [3]
-            - [9]
-            - [3, 6]
+        spkTh: # Th_single_ch (STDs), EMUsort allows aggregation of multiple thresholds
+            - [6, 9, 12, 15] # default setting for EMUsort
+            - [6, 9, 12]
+            - [3, 6, 9]
             - [6, 9]
-            #- [3, 6, 9]
+            - [6]
+            
 # Group-specific parameters
 # channel groups are sorted separately, rows of each parameter define settings for each group
 Group:
@@ -54,8 +54,8 @@ Group:
 # Kilosort parameters
 # nearest_chans and torch_device may be modified in emusort.py to avoid errors
 KS:
-    remove_chan_delays: true # this setting is added to KS4 for EMUsort, will apply channel delays to optimally align MUAPs
-    remove_spike_outliers: true # this setting is added to KS4 for EMUsort, will use HDBSCAN to remove any outlier isolated spikes during initialization
+    remove_chan_delays: true # EMUsort setting, will apply channel delays to optimally align MUAPs
+    remove_spike_outliers: true # EMUsort setting, will use HDBSCAN to remove outlier isolated spikes during initialization
     batch_size: 60000
     nblocks: 0
     Th_universal:
