@@ -41,7 +41,7 @@ Sorting:
             - [3, 6, 9]
             - [6, 9]
             - [6]
-            
+
 # Group-specific parameters
 # channel groups are sorted separately, rows of each parameter define settings for each group
 Group:
