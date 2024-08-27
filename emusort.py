@@ -562,7 +562,7 @@ def extract_sorting_result(sorting, this_config, ii):
     # add entry to the config file for the final folder
     # these_configs[ii]["Data"]["final_folder"] = final_filename
     # print for user to copy and paste into terminal if desired
-    print(f"\nRun:\nphy template-gui {final_filename}/params.py\n")
+    print(f"\nTo view in Phy, run:\nphy template-gui {final_filename}/params.py\n")
 
 
 def run_KS_sorting(job_list, these_configs):
