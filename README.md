@@ -40,19 +40,18 @@ Make sure to navigate into the `EMUsort` folder created
 
 To install micromamba and set up a micromamba environment, follow these steps:
 
->**Windows:** Command causes issue with PowerShell as "<" operator is reserved. Use GitBash shell.
+>**Windows:** Command causes issue with PowerShell as "<" operator is reserved. Install and use GitBash shell instead.
 
     "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
 
-Make sure to restart terminal (manually or with `source` to activate micromamba install)
+Make sure to restart terminal (manually, or use `source` to initialize micromamba in the shell), then navigate into the directory where you cloned the repo and create the environment:
 
+    cd /path/to/where/you/cloned/EMUsort
     micromamba env create -f environment.yml
 
 >**Windows:** The final dependencies related to `pip` may not install, returning an error.
-If so, first activate micromamba environment (`micromamba activate emusort`) and then run:
-
-    pip3 install ./sorting/spikeinterface ./sorting/Kilosort4 "git+https://github.com/cortex-lab/phy.git"
-
+If this happened, just activate the new micromamba environment (`micromamba activate emusort`) and run:
+>`pip3 install ./sorting/spikeinterface ./sorting/Kilosort4 "git+https://github.com/cortex-lab/phy.git"`
 
 #### Conda Environment (Option 2)
 
@@ -61,6 +60,7 @@ To install miniconda and set up a conda-forge environment, follow these steps:
     wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
     bash Miniforge3-Linux-x86_64.sh
     conda init
+    cd /path/to/where/you/cloned/EMUsort
     conda env create -f environment.yml
 
 ## Usage
