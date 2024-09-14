@@ -192,7 +192,7 @@ def load_ephys_data(
         # If loading NWB data
         loaded_recording_list = []
         for iRec in chosen_nwb_files:
-            loaded_recording_list.append(se.NwbRecordingExtractor(str(iRec)))
+            loaded_recording_list.append(se.read_nwb(str(iRec)))
         loaded_recording = si.append_recordings(loaded_recording_list)
     elif dataset_type == "binary":
         # get list of binary recordings
@@ -458,6 +458,7 @@ def extract_sorting_result(sorting, this_config, ii):
 
     Parameters:
     - sorting: KiloSortSortingExtractor - The sorting extractor object containing the spike sorting results.
+    - this_config: dict - The configuration dictionary containing the parameters for the sorting job.
     - ii: int - The index of the sorting job in the job list.
 
     Returns:
@@ -467,7 +468,7 @@ def extract_sorting_result(sorting, this_config, ii):
     waveforms_folder = Path(this_config["Sorting"]["sorted_folder"]) / "waveforms"
     phy_folder = Path(this_config["Sorting"]["sorted_folder"]) / "phy"
     # get nt size from the sorting object, which is the width of the waveforms
-    sampling_frequency = this_config["Data"]["emg_sampling_rate"]
+    sampling_frequency = sorting.get_sampling_frequency()
     nt = this_config["KS"]["nt"]
     ms_buffer = nt / sampling_frequency * 1000 / 2
     print(
@@ -530,9 +531,13 @@ def extract_sorting_result(sorting, this_config, ii):
         this_config["KS"]["Th_universal"],
         tuple(this_config["KS"]["Th_single_ch"]),
     )
-    params_suffix = (
-        f"Th_{Th_this_config[0]},{Th_this_config[1]}_spkTh_{Th_this_config[2]})"
-    )
+    # if no gridsearch was done, do not use the params_suffix
+    if this_config["Sorting"]["do_KS_param_gridsearch"] == 0:
+        params_suffix = ""
+    else:
+        params_suffix = (
+            f"Th_{Th_this_config[0]},{Th_this_config[1]}_spkTh_{Th_this_config[2]})"
+        )
     # export the KS parameter keys that were gridsearched to the filename as Param1-Vals1_Param2-Vals2
     # params_suffix = "_".join(
     #     [
@@ -541,22 +546,23 @@ def extract_sorting_result(sorting, this_config, ii):
     #         if key in this_config["Sorting"]["gridsearch_KS_params"]
     #     ]
     # )
-    final_filename = f'{str(Path(this_config["Sorting"]["sorted_folder"])).split("_worker")[0]}_{time_stamp_us}_{params_suffix}'
+    final_filename = f'{str(Path(this_config["Sorting"]["sorted_folder"])).split("_wkr")[0]}_{params_suffix}'
+    # insert the timestamp after sorted_
+    final_filename = final_filename.replace("sorted_", f"sorted_{time_stamp_us}_")
+    # if only 1 group, remove _g0 from the filename
+    if len(this_config["Group"]["emg_chan_list"]) == 1:
+        final_filename = final_filename.replace("_g0", "")
     # remove whitespace and parens from the filename
-    # final_filename = final_filename.replace(" ", "")
-    # final_filename = final_filename.replace("(", "")
-    # final_filename = final_filename.replace(")", "")
-    # remove whitespace and parens from the stem of the filename
     final_filename = Path(final_filename)
     final_filename = final_filename.with_name(final_filename.name.replace(" ", ""))
     final_filename = final_filename.with_name(final_filename.name.replace("(", ""))
     final_filename = final_filename.with_name(final_filename.name.replace(")", ""))
     final_filename = str(final_filename)
-    # remove trailing comma from the filename
-    if final_filename[-1] == ",":
+    # remove any trailing comma or underscore from the filename
+    while final_filename[-1] in [",", "_"]:
         final_filename = final_filename[:-1]
 
-    # rename the folder to preserve the latest sorting results in the sorted_group#_worker# folder
+    # rename the folder to preserve the latest sorting results in the sorted_g#_wkr# folder
     # also make a new sorter_output_HHMMSSffffff folder with a timestamp
     shutil.move(this_config["Sorting"]["sorted_folder"], final_filename)
     # add entry to the config file for the final folder
@@ -630,7 +636,7 @@ if __name__ == "__main__":
         help="Reset the configuration file to the default EMUsort template",
     )
     parser.add_argument(  # ability to reset the config file for KS4 default settings
-        "--reset-config-ks4",
+        "--ks4-reset-config",
         action="store_true",
         help="Reset the configuration file to the default Kilosort4 template",
     )
@@ -651,12 +657,12 @@ if __name__ == "__main__":
         Path(args.folder).expanduser().resolve().joinpath("emu_config.yaml")
     )
     # if the config doesn't exist or user wants to reset, load the config template
-    if not config_file_path.exists() or args.reset_config or args.reset_config_ks4:
+    if not config_file_path.exists() or args.reset_config or args.ks4_reset_config:
         print(f"Generating config file from default template: \n{config_file_path}\n")
         create_config(
             Path(__file__).parent,
             Path(args.folder).expanduser().resolve(),
-            ks4=args.reset_config_ks4,
+            ks4=args.ks4_reset_config,
         )
 
     # open text editor to validate or edit the configuration file if desired
@@ -694,13 +700,20 @@ if __name__ == "__main__":
             full_config["Sorting"]["output_folder"] = Path(
                 full_config["Data"]["session_folder"]
             )
+        else:
+            # ensure that the output folder is a valid path
+            full_config["Sorting"]["output_folder"] = (
+                Path(full_config["Sorting"]["output_folder"]).expanduser().resolve()
+            )
+            full_config["Sorting"]["output_folder"].mkdir(parents=True, exist_ok=True)
+
         # loop through each group of EMG channels to sort independently
         for iGroup, emg_chan_list in enumerate(full_config["Group"]["emg_chan_list"]):
             preproc_recording = preprocess_ephys_data(recording, full_config, iGroup)
             grp_zfill_amount = len(str(len(full_config["Group"]["emg_chan_list"])))
             this_group_sorted_folder = (
-                Path(full_config["Sorting"]["output_folder"]).expanduser().resolve()
-                / f'{Path(full_config["Data"]["session_folder"]).name}_group{str(iGroup).zfill(grp_zfill_amount)}'
+                Path(full_config["Sorting"]["output_folder"])
+                / f'sorted_g{str(iGroup).zfill(grp_zfill_amount)}_{Path(full_config["Data"]["session_folder"]).name}'
             )
             print(f"Recording information: {preproc_recording}")
             # full_config["sort_group"] = iGroup
@@ -736,9 +749,7 @@ if __name__ == "__main__":
                 # create new folder for each parallel job
                 zfill_amount = len(str(full_config["Sorting"]["num_KS_jobs"]))
                 tmp_sorted_folder = (
-                    str(this_group_sorted_folder)
-                    + "_worker"
-                    + str(iW).zfill(zfill_amount)
+                    str(this_group_sorted_folder) + "_wkr" + str(iW).zfill(zfill_amount)
                 )
                 if Path(tmp_sorted_folder).exists():
                     shutil.rmtree(tmp_sorted_folder, ignore_errors=True)

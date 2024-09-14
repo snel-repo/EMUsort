@@ -5,30 +5,28 @@
 Data:
     dataset_type: 'openephys' # can be 'openephys', 'nwb', 'intan' or 'binary'
     # below three settings are for when 'binary' dataset_type is used
-    emg_sampling_rate: 30000 # sampling rate of the emg data in binary file(s)
-    emg_num_channels: 8 # number of channels in the recording in binary file(s)
+    emg_sampling_rate: # sampling rate of the emg data in binary file(s)
+    emg_num_channels: # number of channels in the recording in binary file(s)
     emg_dtype: 'int16' # data type of the emg data in binary file(s)
-    # specify recordings to process (can be [all] or a list of integers, e.g., [0,1,2,5,6])
-    # chosen recordings will be concatenated prior to sorting
-    emg_recordings: [0]
-    # set bandpass filter settings for emg data
-    emg_passband:
+    emg_recordings: [0] # index of each recording (index into file names of matching dataset_type in the session folder, sorted alphanumerically)
+    # if multiple emg_recordings are chosen, they will be concatenated prior to sorting (can be [all] or a list of integers, e.g., [0,1,2,5,6])
+    emg_passband: # low and high passband frequencies for emg data, in Hz
         - 250
         - 5000
-    time_range: # can be used to slice along time, set start and end to 0 to use all data
+    time_range: # start and end times to slice along time, set both to 0 to use all data
         - 0
         - 0
+
 # Sorting parameters
 Sorting:
     output_folder: # if left blank, will output into the path provided by the session_folder argument
-    # GPU to use for kilosort, (a list of integers, e.g., [0,1,2,5,6])
-    GPU_to_use: [0]
-    # number of Kilosort jobs to be distributed across all chosen GPUs (will run in parallel if >1)
+    GPU_to_use: [0] # GPU to use for kilosort, (a list of integers, e.g., [0,1,2,5,6])
+    num_KS_jobs: 1 # number of Kilosort jobs to be distributed across all chosen GPUs (will run parallel jobs if >1)
     # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is true
-    num_KS_jobs: 1
-    # when do_KS_param_gridsearch is false, only the first rows of each parameter are used (default)
-    do_KS_param_gridsearch: false # set to true for gridsearch
-    gridsearch_KS_params: # 
+    # but do_KS_param_gridsearch can be true when num_KS_jobs = 1
+    do_KS_param_gridsearch: false # set to true to run multiple sorting jobs with different parameters
+    # when do_KS_param_gridsearch is false, only the first rows of each gridsearch_KS_params are used (defaults)
+    gridsearch_KS_params: #  
         Th: # in format [Th_learned, Th_universal] for each element
             - [9, 8] # default setting for Kilosort4
             - [10, 4]
@@ -51,6 +49,7 @@ Group:
     remove_bad_emg_chans: # false to disable, or a string for the method. Can be 'coherence+psd', 'mad', 'std', 'mad#', or 'std#', where # is the cutoff threshold (true defaults to 'mad5'). See spikeinterface's detect_bad_channels() method for more info.
         - false
         #- true # if true, the second group would have bad chans removed by 'mad' method
+
 # Kilosort parameters
 # nearest_chans and torch_device may be modified in emusort.py to avoid errors
 KS:

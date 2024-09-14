@@ -31,10 +31,21 @@ Clone the repository recursively onto your machine (for example, in the home dir
 
 - If you accidentally ran `git clone` without `--recurse-submodules`, just delete the entire `EMUsort` folder and rerun the above command
 
-After cloning is complete, configure a micromamba or conda environment
-Make sure to navigate into the `EMUsort` folder created
+After cloning is complete, you will need to configure a micromamba or conda environment.
+
+### Pulling Updates from GitHub
+
+If your cloned repo ever becomes out of date, you should likely pull updates from the main repo. To do so, navigate into the `EMUsort` folder and run:
+
+    git pull && git submodule update
+
+After updating, if you encounter any issues with the configuration file afterwards, you may need to reset it to default by running:
+
+    python emusort.py --folder /path/to/session_folder --reset-config
 
 ### Python Environment Creation
+
+Before following the below steps, make sure to navigate into the `EMUsort` folder where you cloned the repo.
 
 #### Micromamba (Option 1, recommended)
 
@@ -44,9 +55,9 @@ To install micromamba and set up a micromamba environment, follow these steps:
 
     "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
 
-Make sure to restart terminal (manually, or use `source` to initialize micromamba in the shell), then navigate into the directory where you cloned the repo and create the environment:
+Make sure to restart terminal (manually, or use `source` to initialize micromamba in the shell), then run:
 
-    cd /path/to/where/you/cloned/EMUsort
+    cd /path/to/repo_folder # go into EMUsort folder
     micromamba env create -f environment.yml
 
 >**Windows:** The final dependencies related to `pip` may not install, returning an error.
@@ -60,7 +71,7 @@ To install miniconda and set up a conda-forge environment, follow these steps:
     wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
     bash Miniforge3-Linux-x86_64.sh
     conda init
-    cd /path/to/where/you/cloned/EMUsort
+    cd /path/to/repo_folder # go into EMUsort folder
     conda env create -f environment.yml
 
 ## Usage
@@ -89,7 +100,7 @@ However, all you need to do is create a new folder with your desired dataset fil
      - if using Open Ephys, that folder itself will act as the session folder
 2. `emu_config.yaml` file
    - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command-line option
-3. `sorted_###` folders (tagged with datetime stamps, parameters that were used, etc.)
+3. `sorted_###` folders (tagged with datetime stamp, session folder name, group ID, and parameters used)
    - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the ops used to sort the data. The original OpenEphys data will not be modified.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
