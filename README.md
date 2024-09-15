@@ -110,8 +110,13 @@ Items #2-4, will be generated automatically inside the provided session folder.
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
 
 ### Example Folder Tree
+#### Intan, NWB, and Binary datasets:
 
 ![Alt text](images/folder_tree_structure.png)
+
+#### Open Ephys datasets:
+
+![Alt text](images/OE_folder_tree_structure.png)
 
 ### EMUsort Commands
 
