@@ -13,7 +13,6 @@ import os
 import shutil
 import subprocess
 from copy import deepcopy
-
 # from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Pool
 from pathlib import Path
@@ -268,6 +267,17 @@ def preprocess_ephys_data(
     else:
         loaded_recording = recording_obj.select_segments(emg_recordings_to_use)
 
+    # check for [all] in emg_chan_list
+    if this_config["Group"]["emg_chan_list"][iGroup][0] == "all":
+        this_config["Group"]["emg_chan_list"][iGroup] = np.arange(
+            loaded_recording.get_num_channels()
+        )
+        # remove any automatically selected ADC channels from the list
+        this_config["Group"]["emg_chan_list"][iGroup] = [
+            chan_idx
+            for chan_idx in this_config["Group"]["emg_chan_list"][iGroup]
+            if "ADC" not in loaded_recording.get_channel_ids()[chan_idx]
+        ]
     # slice channels for this group
     selected_channel_ids = loaded_recording.get_channel_ids()[
         this_config["Group"]["emg_chan_list"][iGroup]

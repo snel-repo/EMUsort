@@ -5,7 +5,7 @@
 # provide information specific to the dataset you want to sort
 Data:
     dataset_type: 'openephys' # can be 'openephys', 'nwb', 'intan' or 'binary'
-    # below three settings are for when 'binary' dataset_type is used
+    # below three settings are only used when 'binary' dataset_type is chosen
     emg_sampling_rate: # sampling rate of the emg data in binary file(s)
     emg_num_channels: # number of channels in the recording in binary file(s)
     emg_dtype: 'int16' # data type of the emg data in binary file(s)
@@ -44,12 +44,14 @@ Sorting:
 # Group-specific parameters
 # channel groups are sorted separately, rows of each parameter define settings for each group
 Group:
-    emg_chan_list: # List of channels to sort, zero-indexed
+    emg_chan_list: # Which channels to sort, zero-indexed (can be [all] or a list of integers, e.g., [0,1,2,5,6])
         - [0,1,2,3,4,5,6,7]
-        #- [8,9,10,11,12,13,14] # this row defines parameters for the second group
+        #- [all] # this row defines parameters for the second group
+        #- [8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31] # third group
     remove_bad_emg_chans: # false to disable, or a string for the method. Can be 'coherence+psd', 'mad', 'std', 'mad#', or 'std#', where # is the cutoff threshold (true defaults to 'mad5'). See spikeinterface's detect_bad_channels() method for more info.
         - false
         #- true # if true, the second group would have bad chans removed by 'mad' method
+        #- std10 # if 'std10', the third group would have bad chans removed by 'std' method with threshold 10
 
 # Kilosort parameters
 # nearest_chans and torch_device may be modified in emusort.py to avoid errors

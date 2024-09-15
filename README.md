@@ -104,7 +104,7 @@ Items #2-4, will be generated automatically inside the provided session folder.
    - Record Node ### (if using OpenEphys session folder)
 2. `emu_config.yaml` file
    - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command-line option
-3. `sorted_HHMMSS_ffffff_g#_<session_folder>_Th#_spkTh#` folders (tagged with datetime stamp, session folder name, group ID, and parameters used)
+3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_Th#_spkTh#` folders (tagged with datetime stamp, group ID, session folder name, and parameters used)
    - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']`). The original dataset files will not be modified.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
@@ -140,7 +140,7 @@ To perform multiple operations in sequence, you can append any combination of th
     --folder, -f
     --config, -c
     --sort, -s
-    --reset-config
+    --reset-config, --r
 
 For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `python emusort.py --reset-config -csf /path/to/session_folder`
 
