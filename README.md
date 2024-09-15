@@ -7,9 +7,9 @@
 - Use a central config file to control all parameters
 - Capable of automatically handling Intan, OpenEphys, NWB, and Binary datasets
   - Combine recordings into single object for unified processing
-  - Remove broken or noisy channels
+  - Remove broken or noisy channels automatically
   - Perform spike sorting with a modified version of Kilosort4 for 5-10% accuracy boost (see paper)
-  - Export results to Phy by default
+  - Export results and easily view in Phy
 
 ## Installation
 
@@ -47,7 +47,7 @@ After updating, if you encounter any issues with the configuration file afterwar
 
 Before following the below steps, make sure to navigate into the `EMUsort` folder where you cloned the repo.
 
-#### Micromamba (Option 1, recommended)
+#### Micromamba (Option 1, recommended for Linux)
 
 To install micromamba and set up a micromamba environment, follow these steps:
 
@@ -64,13 +64,15 @@ Make sure to restart terminal (manually, or use `source` to initialize micromamb
 If this happened, just activate the new micromamba environment (`micromamba activate emusort`) and run:
 >`pip3 install ./sorting/spikeinterface ./sorting/Kilosort4 "git+https://github.com/cortex-lab/phy.git"`
 
-#### Conda Environment (Option 2)
+#### Conda Environment (Option 2, recommended for Windows)
 
-To install miniconda and set up a conda-forge environment, follow these steps:
+To install miniconda, follow these instructions, making sure to select the option for your OS:
+- https://docs.anaconda.com/miniconda/#quick-command-line-install
 
-    wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
-    bash Miniforge3-Linux-x86_64.sh
-    conda init
+>**Windows:** Open Anaconda Prompt from the Start Menu, and proceed with the below commands
+
+Run the below commands in the conda-initialized terminal:
+    
     cd /path/to/repo_folder # go into EMUsort folder
     conda env create -f environment.yml
 
@@ -89,19 +91,21 @@ If a conda environment was used, activate it using
 
 ### Session Folder Structure
 
-EMUSort uses session folders which will contain the following 4 items.
-However, all you need to do is create a new folder with your desired dataset files (Item #1 below). Everything else will be taken care of and generated automatically.
+EMUsort relies on a main "session folder", which contains the below 4 items.
+- For Intan, NWB, or Binary datasets, all you need to do is create a new session folder to contain your desired dataset files (Item #1 below)
+- For Open Ephys, the session folder itself (dated folder containing 'Record Node ###') will act as the session folder.
 
-1. Various supported dataset files (different types of input datasets are supported)
+Items #2-4, will be generated automatically inside the provided session folder.
+
+1. Data files (several dataset formats are supported)
    - Intan RHD/RHS files
    - NWB files
    - Binary recording files
-   - Open Ephys session folder
-     - if using Open Ephys, that folder itself will act as the session folder
+   - Record Node ### (if using OpenEphys session folder)
 2. `emu_config.yaml` file
    - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command-line option
-3. `sorted_###` folders (tagged with datetime stamp, session folder name, group ID, and parameters used)
-   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the ops used to sort the data. The original OpenEphys data will not be modified.
+3. `sorted_HHMMSS_ffffff_g#_<session_folder>_Th#_spkTh#` folders (tagged with datetime stamp, session folder name, group ID, and parameters used)
+   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']`). The original dataset files will not be modified.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
 
@@ -111,11 +115,15 @@ However, all you need to do is create a new folder with your desired dataset fil
 
 ### EMUsort Commands
 
-To simply validate proper folder tree organization, and generate a config file if it doesn't exist, navigate to where you cloned the GitHub repo and run (can use either Absolute or Relative path to the folder with data that you created):
+To show a helpful summary of EMUsort commands:
+
+    python emusort.py --help
+
+To simply generate a config file (if it doesn't exist), navigate into the `EMUsort` repo folder and run (absolute/relative paths are both acceptable):
 
     python emusort.py --folder /path/to/session_folder
 
-Editing the main configuration file can be done by running the command below:
+Editing the main configuration file can be done by running the command below (will be generated if it doesn't exist):
 
     python emusort.py --folder /path/to/session_folder --config
 
@@ -166,6 +174,6 @@ Be aware of the combinatorics so you don't generate more sorts than you expected
 
 ## Final Notes
 
-If there are any discrepancies in instructions between the README and any comments/code, please treat this README as the final source of truth.
+If there are any discrepancies in instructions between the README and any comments/code, please let us know by submitting an issue on GitHub.
 
-Thank you for trying out EMUSort! We hope you enjoy it.
+Thank you for trying out `EMUsort`! We hope you enjoy it.
