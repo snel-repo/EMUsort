@@ -213,9 +213,9 @@ def load_ephys_data(
             loaded_recording_list.append(
                 se.read_binary(
                     str(iRec),
-                    sampling_frequency=config["Data"]["binary_emg_sampling_rate"],
-                    num_channels=config["Data"]["binary_emg_num_channels"],
-                    dtype=config["Data"]["binary_emg_dtype"],
+                    sampling_frequency=config["Data"]["binary_sampling_rate"],
+                    num_channels=config["Data"]["binary_num_channels"],
+                    dtype=config["Data"]["binary_dtype"],
                 )
             )
         loaded_recording = si.append_recordings(loaded_recording_list)
