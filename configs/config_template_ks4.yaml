@@ -96,7 +96,7 @@ KS:
     scaleproc:
     torch_device: auto
 
-# SpikeInterface parameters
+# SpikeInterface multiprocessing parameters, can be used to speed up some operations by spreading the work over several CPUs
 SI:
-    n_jobs: 0.5 # Number of jobs to use for spikeinterface processing if int. With -1, the number of jobs is the same as number of cores. Using a float between 0 and 1 will use that fraction of the total cores.
+    n_jobs: 0.5 # Number of cores to use for spikeinterface processing if int. With -1, the number of all cores are used. With float between 0 and 1, that fraction of all cores will be used.
     chunk_duration: '1s' # Chunk duration in seconds if float or with units if str (e.g. '1s', '500ms')
