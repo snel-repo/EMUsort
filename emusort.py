@@ -700,7 +700,7 @@ if __name__ == "__main__":
     assert (
         full_config["KS"]["do_correction"] == False
     ), "do_correction must be False for EMUsort"
-    assert full_config["KS"]["do_CAR"] == False, "do_CAR must be False for EMUsort"
+    # assert full_config["KS"]["do_CAR"] == False, "do_CAR must be False for EMUsort"
 
     # EMG Preprocessing and Spike Sorting
     if args.sort:
