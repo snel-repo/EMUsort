@@ -158,8 +158,11 @@ def load_ephys_data(
     dataset_type = config["Data"]["dataset_type"]
     if dataset_type == "openephys":
         # If loading Open Ephys data
-        loaded_recording = se.read_openephys(session_folder, stream_id=str(config["Data"]["openephys_stream_id"]), 
-                                                             block_index=config["Data"]["openephys_experiment_id"])
+        loaded_recording = se.read_openephys(
+            session_folder,
+            stream_id=str(config["Data"]["openephys_stream_id"]),
+            block_index=config["Data"]["openephys_experiment_id"],
+        )
     elif dataset_type == "intan":
         # get list of intan recordings
         rhd_and_rhs_files = [
@@ -272,13 +275,13 @@ def preprocess_ephys_data(
     if this_config["Group"]["emg_chan_list"][iGroup][0] == "all":
         this_config["Group"]["emg_chan_list"][iGroup] = np.arange(
             loaded_recording.get_num_channels()
-        )
-        # remove any automatically selected ADC channels from the list
-        this_config["Group"]["emg_chan_list"][iGroup] = [
-            chan_idx
-            for chan_idx in this_config["Group"]["emg_chan_list"][iGroup]
-            if "ADC" not in loaded_recording.get_channel_ids()[chan_idx]
-        ]
+        ).tolist()
+    # remove any ADC channels from the list
+    this_config["Group"]["emg_chan_list"][iGroup] = [
+        chan_idx
+        for chan_idx in this_config["Group"]["emg_chan_list"][iGroup]
+        if "ADC" not in loaded_recording.get_channel_ids()[chan_idx]
+    ]
     # slice channels for this group
     selected_channel_ids = loaded_recording.get_channel_ids()[
         this_config["Group"]["emg_chan_list"][iGroup]
@@ -576,8 +579,13 @@ def extract_sorting_result(sorting, this_config, ii):
     # rename the folder to preserve the latest sorting results in the sorted_g#_wkr# folder
     # also make a new sorter_output_HHMMSSffffff folder with a timestamp
     shutil.move(this_config["Sorting"]["sorted_folder"], final_filename)
-    # add entry to the config file for the final folder
-    # these_configs[ii]["Data"]["final_folder"] = final_filename
+    # dump this_config into the final folder of each sort
+    dump_yaml(Path(final_filename).joinpath("emu_config.yaml"), this_config)
+    # save the this_config["emg_chans_used"] to a npy file in the final folder
+    np.save(
+        Path(final_filename).joinpath("emg_chans_used.npy"),
+        this_config["emg_chans_used"],
+    )
     # print for user to copy and paste into terminal if desired
     print(f"\nTo view in Phy, run:\nphy template-gui {final_filename}/params.py\n")
 
@@ -625,6 +633,7 @@ def run_KS_sorting(job_list, these_configs):
             for ii, sorting in enumerate(sortings):
                 extract_sorting_result(sorting, these_configs[ii], ii)
     else:
+        # only run one job, since num_KS_jobs is set to 1
         extract_sorting_result(sortings[0], these_configs[0], 0)
 
 
@@ -692,8 +701,16 @@ if __name__ == "__main__":
         }
     )
 
-    si.set_global_job_kwargs(n_jobs=full_config['SI']['n_jobs'],
-                             chunk_duration=full_config['SI']['chunk_duration'])
+    if full_config["Sorting"]["num_KS_jobs"] > 1:
+        print(
+            "Because num_KS_jobs > 1, cannot use more than 1 core for spikeinterface global job kwargs. Setting n_jobs=1."
+        )
+        full_config["SI"]["n_jobs"] = 1
+
+    si.set_global_job_kwargs(
+        n_jobs=full_config["SI"]["n_jobs"],
+        chunk_duration=full_config["SI"]["chunk_duration"],
+    )
 
     # below are checks of the configuration file to avoid downstream errors
     assert full_config["KS"]["nblocks"] == False, "nblocks must be False for EMUsort"
@@ -788,6 +805,11 @@ if __name__ == "__main__":
                 this_config["KS"]["torch_device"] = (
                     "cuda:" + torch_device_ids[iW] if is_available() else "cpu"
                 )
+                # store which channels were used for this group, minus 1 for 0-based indexing
+                this_config["emg_chans_used"] = [
+                    int(str(i).split("CH")[-1]) - 1
+                    for i in preproc_recording.get_channel_ids()
+                ]
                 # print(this_config["KS"]["torch_device"])
                 these_configs.append(this_config)
 

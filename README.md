@@ -93,7 +93,7 @@ If a conda environment was used, activate it using
 
 EMUsort relies on a main "session folder", which contains the below 4 items.
 - For Intan, NWB, or Binary datasets, all you need to do is create a new session folder to contain your desired dataset files (Item #1 below)
-- For Open Ephys, the session folder itself (dated folder containing 'Record Node ###') will act as the session folder.
+- For Open Ephys, the session folder itself (dated folder containing 'Record Node ###') will act as the session folder. The original dataset files will not be modified.
 
 Items #2-4, will be generated automatically inside the provided session folder.
 
@@ -105,7 +105,7 @@ Items #2-4, will be generated automatically inside the provided session folder.
 2. `emu_config.yaml` file
    - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command-line option
 3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_Th#_spkTh#` folders (tagged with datetime stamp, group ID, session folder name, and parameters used)
-   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']`). The original dataset files will not be modified.
+   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']`). The corresponding channel indexes for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` is also dumped for future reference, which also includes channel indexes used in each sort as `emg_chans_used`.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
 
@@ -173,7 +173,7 @@ depending on which environment manager you are using
 
 ### Grid Search Over Multiple Kilosort Parameters to Produce Many Sorts in Parallel
 
-If you want to run a grid search over a range of KS parameters, edit `emu_config.py` under the `Sorting` section and set the `do_KS_param_gridsearch` field to `true`. Above it, modify `GPU_to_use` to include as many/whichever GPUs you'd like. Modify `num_KS_jobs` to specify how many jobs you'd like each GPU to run to achieve parallel processing.
+If you want to run multiple sort jobs in parallel across a range of KS parameters, edit `emu_config.py` under the `Sorting` section and set the `do_KS_param_gridsearch` field to `true`. Above it, modify `GPU_to_use` to include all the GPUs that should be used. Modify `num_KS_jobs` to specify how many total jobs to distribute across all chosen GPUs.
 
 Be aware of the combinatorics so you don't generate more sorts than you expected (e.g., NxM combinations for N of param1 and M of param2).
 
