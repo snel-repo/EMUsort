@@ -692,8 +692,8 @@ if __name__ == "__main__":
         }
     )
 
-    si.set_global_job_kwargs(n_jobs=full_config['spikeinterface']['n_jobs'],
-                             chunk_duration=full_config['spikeinterface']['chunk_duration'])
+    si.set_global_job_kwargs(n_jobs=full_config['SI']['n_jobs'],
+                             chunk_duration=full_config['SI']['chunk_duration'])
 
     # below are checks of the configuration file to avoid downstream errors
     assert full_config["KS"]["nblocks"] == False, "nblocks must be False for EMUsort"
