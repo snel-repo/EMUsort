@@ -158,7 +158,8 @@ def load_ephys_data(
     dataset_type = config["Data"]["dataset_type"]
     if dataset_type == "openephys":
         # If loading Open Ephys data
-        loaded_recording = se.read_openephys(session_folder)
+        loaded_recording = se.read_openephys(session_folder, stream_id=str(config["Data"]["openephys_stream_id"]), 
+                                                             block_index=config["Data"]["openephys_experiment_id"])
     elif dataset_type == "intan":
         # get list of intan recordings
         rhd_and_rhs_files = [
@@ -212,9 +213,9 @@ def load_ephys_data(
             loaded_recording_list.append(
                 se.read_binary(
                     str(iRec),
-                    sampling_frequency=config["Data"]["emg_sampling_rate"],
-                    num_channels=config["Data"]["emg_num_channels"],
-                    dtype=config["Data"]["emg_dtype"],
+                    sampling_frequency=config["Data"]["binary_emg_sampling_rate"],
+                    num_channels=config["Data"]["binary_emg_num_channels"],
+                    dtype=config["Data"]["binary_emg_dtype"],
                 )
             )
         loaded_recording = si.append_recordings(loaded_recording_list)
@@ -690,6 +691,9 @@ if __name__ == "__main__":
             "session_folder": Path(args.folder).expanduser().resolve(),
         }
     )
+
+    si.set_global_job_kwargs(n_jobs=full_config['spikeinterface']['n_jobs'],
+                             chunk_duration=full_config['spikeinterface']['chunk_duration'])
 
     # below are checks of the configuration file to avoid downstream errors
     assert full_config["KS"]["nblocks"] == False, "nblocks must be False for EMUsort"

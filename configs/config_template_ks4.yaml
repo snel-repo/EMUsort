@@ -5,10 +5,13 @@
 # provide information specific to the dataset you want to sort
 Data:
     dataset_type: 'openephys' # can be 'openephys', 'nwb', 'intan' or 'binary'
+    # below two settings are only used when 'openephys' dataset_type is chosen
+    openephys_experiment_id: 0 # for openephys recordings with several experiment per session, index of the experiment to use (corresponds to "block_index" in spikeinterface)
+    openephys_stream_id: 0 #for openephys recordings with several streams, index of the stream to use
     # below three settings are only used when 'binary' dataset_type is chosen
-    emg_sampling_rate: # sampling rate of the emg data in binary file(s)
-    emg_num_channels: # number of channels in the recording in binary file(s)
-    emg_dtype: 'int16' # data type of the emg data in binary file(s)
+    binary_emg_sampling_rate: # sampling rate of the emg data in binary file(s)
+    binary_emg_num_channels: # number of channels in the recording in binary file(s)
+    binary_emg_dtype: 'int16' # data type of the emg data in binary file(s)
     emg_recordings: [0] # index of each recording (index into file names of matching dataset_type in the session folder, sorted alphanumerically)
     # if multiple emg_recordings are chosen, they will be concatenated prior to sorting (can be [all] or a list of integers, e.g., [0,1,2,5,6])
     emg_passband: # low and high passband frequencies for emg data, in Hz
