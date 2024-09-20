@@ -276,12 +276,13 @@ def preprocess_ephys_data(
         this_config["Group"]["emg_chan_list"][iGroup] = np.arange(
             loaded_recording.get_num_channels()
         ).tolist()
-    # remove any ADC channels from the list
-    this_config["Group"]["emg_chan_list"][iGroup] = [
-        chan_idx
-        for chan_idx in this_config["Group"]["emg_chan_list"][iGroup]
-        if "ADC" not in loaded_recording.get_channel_ids()[chan_idx]
-    ]
+        # remove any ADC channels from the list for OpenEphys recordings
+        if this_config["Data"]["dataset_type"] == "openephys":
+            this_config["Group"]["emg_chan_list"][iGroup] = [
+                int(chan_idx)
+                for chan_idx in this_config["Group"]["emg_chan_list"][iGroup]
+                if "ADC" not in loaded_recording.get_channel_ids()[chan_idx]
+            ]
     # slice channels for this group
     selected_channel_ids = loaded_recording.get_channel_ids()[
         this_config["Group"]["emg_chan_list"][iGroup]
@@ -805,12 +806,8 @@ if __name__ == "__main__":
                 this_config["KS"]["torch_device"] = (
                     "cuda:" + torch_device_ids[iW] if is_available() else "cpu"
                 )
-                # store which channels were used for this group, minus 1 for 0-based indexing
-                this_config["emg_chans_used"] = [
-                    int(str(i).split("CH")[-1]) - 1
-                    for i in preproc_recording.get_channel_ids()
-                ]
-                # print(this_config["KS"]["torch_device"])
+                this_config["emg_chans_used"] = preproc_recording.get_channel_ids().tolist()
+                
                 these_configs.append(this_config)
 
             job_list = [
