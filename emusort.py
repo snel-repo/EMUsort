@@ -281,7 +281,7 @@ def preprocess_ephys_data(
             this_config["Group"]["emg_chan_list"][iGroup] = [
                 int(chan_idx)
                 for chan_idx in this_config["Group"]["emg_chan_list"][iGroup]
-                if "ADC" not in loaded_recording.get_channel_ids()[chan_idx]
+                if "ADC" not in str(loaded_recording.get_channel_ids()[chan_idx])
             ]
     # slice channels for this group
     selected_channel_ids = loaded_recording.get_channel_ids()[
