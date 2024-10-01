@@ -458,6 +458,7 @@ def concatenate_emg_data(
                     recording_concatenated = concat_and_save(concat_data_path)
         else:
             dump_yaml(concat_data_path.joinpath("last_config.yaml"), this_config)
+            recording_concatenated = concat_and_save(concat_data_path)
     else:
         concat_data_path.mkdir(parents=True, exist_ok=True)
         print("Concatenated data folder created.")
