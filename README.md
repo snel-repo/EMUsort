@@ -179,6 +179,6 @@ Be aware of the combinatorics so you don't generate more sorts than you expected
 
 ## Final Notes
 
-If there are any discrepancies in instructions between the README and any comments/code, please let us know by submitting an issue on GitHub.
+If there are any discrepancies in the instructions or any problems with the comments/code, please let us know by submitting an issue on GitHub.
 
-Thank you for trying out `EMUsort`! We hope you enjoy it.
+Thank you for trying out `EMUsort`! If you find it helpful (or simply love emus), shoot us a ⭐️
