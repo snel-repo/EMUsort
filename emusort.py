@@ -8,12 +8,12 @@ if sys.version_info < (3, 5):
 from datetime import datetime
 
 start_time = datetime.now()  # include imports in time cost
+
 import argparse
 import os
 import shutil
 import subprocess
 from copy import deepcopy
-# from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Pool
 from pathlib import Path
 from typing import Union
@@ -456,14 +456,20 @@ def concatenate_emg_data(
                         "Failed to load previously concatenated data, re-running concatenation..."
                     )
                     recording_concatenated = concat_and_save(concat_data_path)
+                    dump_yaml(
+                        concat_data_path.joinpath("last_config.yaml"), this_config
+                    )
         else:
-            dump_yaml(concat_data_path.joinpath("last_config.yaml"), this_config)
+            print(
+                "No previous configuration file 'last_config.yaml' found, re-running concatenation..."
+            )
             recording_concatenated = concat_and_save(concat_data_path)
+            dump_yaml(concat_data_path.joinpath("last_config.yaml"), this_config)
     else:
         concat_data_path.mkdir(parents=True, exist_ok=True)
         print("Concatenated data folder created.")
-        dump_yaml(concat_data_path.joinpath("last_config.yaml"), this_config)
         recording_concatenated = concat_and_save(concat_data_path)
+        dump_yaml(concat_data_path.joinpath("last_config.yaml"), this_config)
 
     return recording_concatenated
 
@@ -807,8 +813,10 @@ if __name__ == "__main__":
                 this_config["KS"]["torch_device"] = (
                     "cuda:" + torch_device_ids[iW] if is_available() else "cpu"
                 )
-                this_config["emg_chans_used"] = preproc_recording.get_channel_ids().tolist()
-                
+                this_config["emg_chans_used"] = (
+                    preproc_recording.get_channel_ids().tolist()
+                )
+
                 these_configs.append(this_config)
 
             job_list = [
