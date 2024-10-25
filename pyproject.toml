@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=42", "wheel", "setuptools_scm"]
+
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emusort"
+dynamic = ["version"]
+description = "A command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography"
+requires-python = ">=3.5" # Specify the minimum Python version
+authors = [
+    { name = "Sean O'Connell", email = "smarkoco@proton.me" },
+    { name = "Jonathan A Michaels", email = "jmichae@yorku.ca" },
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+
+[project.urls]
+Homepage = "https://github.com/snel-repo/EMUsort"
+
+[project.scripts]
+emusort = "emusort.emusort:main" # Entry point for your command-line tool

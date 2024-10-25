@@ -37,6 +37,7 @@ dependencies:
   - xarray
   - zarr
   - pip:
-        - "-e ./sorting/spikeinterface" # install local spikeinterface for EMUsort
-        - "-e ./sorting/Kilosort4" # install local Kilosort4 for EMUsort
+        - "-e ./src/emusort/spikeinterface" # install local spikeinterface for EMUsort
+        - "-e ./src/emusort/Kilosort4" # install local Kilosort4 for EMUsort
+        - "-e ."
         - git+https://github.com/cortex-lab/phy.git # latest version of phy from GitHub

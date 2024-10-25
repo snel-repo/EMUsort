@@ -105,6 +105,7 @@ def strfdelta(tdelta: datetime, fmt: str) -> str:
 def dump_yaml(dump_path: Path, this_config: dict):
     # convert Path objects to strings before saving
     this_config = path_to_str_recursive(this_config)
+    yaml = YAML()
     with open(dump_path, "w") as f:
         yaml.dump(this_config, f)
 
@@ -439,6 +440,9 @@ def concatenate_emg_data(
                 dict(this_config)
             )  # Cast to dictionary
             if not dicts_match(last_config_dict["Data"], this_config_dict["Data"]):
+                import pdb
+
+                pdb.set_trace()
                 print(
                     "Data section of configuration file has changed since last run, re-running concatenation..."
                 )
@@ -474,7 +478,7 @@ def concatenate_emg_data(
     return recording_concatenated
 
 
-def extract_sorting_result(sorting, this_config, ii):
+def extract_sorting_result(this_sorting, this_config, this_job, ii):
     """
     Parallel-friendly function to extract and save the sorting results to the specified folder.
 
@@ -490,7 +494,7 @@ def extract_sorting_result(sorting, this_config, ii):
     waveforms_folder = Path(this_config["Sorting"]["sorted_folder"]) / "waveforms"
     phy_folder = Path(this_config["Sorting"]["sorted_folder"]) / "phy"
     # get nt size from the sorting object, which is the width of the waveforms
-    sampling_frequency = sorting.get_sampling_frequency()
+    sampling_frequency = this_sorting.get_sampling_frequency()
     nt = this_config["KS"]["nt"]
     ms_buffer = nt / sampling_frequency * 1000 / 2
     print(
@@ -498,8 +502,8 @@ def extract_sorting_result(sorting, this_config, ii):
     )
     try:
         we = si.extract_waveforms(
-            job_list[ii]["recording"],
-            sorting,
+            this_job["recording"],
+            this_sorting,
             waveforms_folder,
             ms_before=ms_buffer,
             ms_after=ms_buffer,
@@ -510,12 +514,15 @@ def extract_sorting_result(sorting, this_config, ii):
         import spikeinterface.curation as scur
 
         remove_excess_spikes_recording = scur.remove_excess_spikes(
-            sorting, job_list[ii]["recording"]
+            this_sorting, this_job["recording"]
         )
 
         # loaded_recording.set_probe(probe)
         we = si.extract_waveforms(
-            remove_excess_spikes_recording, sorting, waveforms_folder, overwrite=True
+            remove_excess_spikes_recording,
+            this_sorting,
+            waveforms_folder,
+            overwrite=True,
         )
 
     export_to_phy(
@@ -633,19 +640,19 @@ def run_KS_sorting(job_list, these_configs):
             with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
                 pool.starmap(
                     extract_sorting_result,
-                    zip(sortings, these_configs, range(len(job_list))),
+                    zip(sortings, these_configs, job_list, range(len(job_list))),
                 )
         except (
             NameError
         ):  # this is to catch a Windows error where these_configs is not defined in the worker
             for ii, sorting in enumerate(sortings):
-                extract_sorting_result(sorting, these_configs[ii], ii)
+                extract_sorting_result(sorting, these_configs[ii], job_list[ii], ii)
     else:
         # only run one job, since num_KS_jobs is set to 1
-        extract_sorting_result(sortings[0], these_configs[0], 0)
+        extract_sorting_result(sortings[0], these_configs[0], job_list[0], 0)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description="Process EMG data and perform spike sorting."
     )
@@ -680,6 +687,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Set repo folder path
+    repo_folder_path = Path(__file__).parent.parent.parent
+
     # Generate, reset, or load config file
     config_file_path = (
         Path(args.folder).expanduser().resolve().joinpath("emu_config.yaml")
@@ -688,7 +698,7 @@ if __name__ == "__main__":
     if not config_file_path.exists() or args.reset_config or args.ks4_reset_config:
         print(f"Generating config file from default template: \n{config_file_path}\n")
         create_config(
-            Path(__file__).parent,
+            repo_folder_path,
             Path(args.folder).expanduser().resolve(),
             ks4=args.ks4_reset_config,
         )
@@ -704,7 +714,7 @@ if __name__ == "__main__":
     # Prepare common configuration file, accounting for section titles, Data, Sorting, and Group
     full_config["Data"].update(
         {
-            "repo_folder": Path(__file__).parent,
+            "repo_folder": repo_folder_path,
             "session_folder": Path(args.folder).expanduser().resolve(),
         }
     )
@@ -838,16 +848,6 @@ if __name__ == "__main__":
         f"Time elapsed: {strfdelta(time_elapsed, '{hours} hours, {minutes} minutes, {seconds} seconds')}"
     )
 
-    # if args.phy:
-    #     # make sure only one sort was performed
-    #     if len(these_configs) > 1 or len(full_config["Group"]["emg_chan_list"]) > 1:
-    #         print(
-    #             "Multiple sorts were performed, ignoring -p/--phy flag. Phy command can only be used for one sort at a time."
-    #         )
-    #         args.phy = False
 
-    #     if args.phy:
-    #         # open Phy GUI for this final folder
-    #         subprocess.run(
-    #             ["phy", "template-gui", these_configs[0]["Data"]["final_folder"]]
-    #         )
+if __name__ == "__main__":
+    main()

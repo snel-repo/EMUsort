@@ -1,5 +1,6 @@
 *.prof
 *.mexa64
 __pycache__
+*.egg-info
 .vscode
 .DS_Store
