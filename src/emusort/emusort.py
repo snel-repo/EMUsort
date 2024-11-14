@@ -10,6 +10,7 @@ from datetime import datetime
 start_time = datetime.now()  # include imports in time cost
 
 import argparse
+import asyncio
 import os
 import shutil
 import subprocess
@@ -140,6 +141,17 @@ def path_to_str_recursive(data):
         return [path_to_str_recursive(item) for item in data]
     else:
         return data
+
+
+def movetree(src, dest):
+    for item in src.iterdir():
+        dest_item = dest / item.name
+        if dest_item.exists():
+            if dest_item.is_file():
+                dest_item.unlink()
+            elif dest_item.is_dir():
+                shutil.rmtree(dest_item)
+        shutil.move(str(item), str(dest))
 
 
 def load_ephys_data(
@@ -440,9 +452,6 @@ def concatenate_emg_data(
                 dict(this_config)
             )  # Cast to dictionary
             if not dicts_match(last_config_dict["Data"], this_config_dict["Data"]):
-                import pdb
-
-                pdb.set_trace()
                 print(
                     "Data section of configuration file has changed since last run, re-running concatenation..."
                 )
@@ -478,21 +487,25 @@ def concatenate_emg_data(
     return recording_concatenated
 
 
-def extract_sorting_result(this_sorting, this_config, this_job, ii):
+async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     """
-    Parallel-friendly function to extract and save the sorting results to the specified folder.
-
-    Parameters:
-    - sorting: KiloSortSortingExtractor - The sorting extractor object containing the spike sorting results.
-    - this_config: dict - The configuration dictionary containing the parameters for the sorting job.
-    - ii: int - The index of the sorting job in the job list.
-
-    Returns:
-    - None
+    Asynchronous version of extract_sorting_result, offloading blocking I/O tasks to background threads.
     """
     # Save sorting results by exporting to Phy format
-    waveforms_folder = Path(this_config["Sorting"]["sorted_folder"]) / "waveforms"
-    phy_folder = Path(this_config["Sorting"]["sorted_folder"]) / "phy"
+    sorted_folder = Path(this_config["Sorting"]["sorted_folder"])
+    waveforms_folder = sorted_folder / "waveforms"
+    phy_folder = sorted_folder / "phy"
+
+    # If these folders already exist, delete the contents
+    # if waveforms_folder.exists():
+    #     await asyncio.to_thread(shutil.rmtree, waveforms_folder)
+    # if phy_folder.exists():
+    #     await asyncio.to_thread(shutil.rmtree, phy_folder)
+    if waveforms_folder.exists():
+        shutil.rmtree(waveforms_folder)
+    if phy_folder.exists():
+        shutil.rmtree(phy_folder)
+
     # get nt size from the sorting object, which is the width of the waveforms
     sampling_frequency = this_sorting.get_sampling_frequency()
     nt = this_config["KS"]["nt"]
@@ -500,32 +513,42 @@ def extract_sorting_result(this_sorting, this_config, this_job, ii):
     print(
         f"Worker {ii} extracting waveforms with nt={nt} at fs={sampling_frequency} Hz (ms_before=ms_after={np.round(ms_buffer, 3)} ms)."
     )
+
     try:
-        we = si.extract_waveforms(
+        # Extract waveforms
+        we = await asyncio.to_thread(
+            si.extract_waveforms,
             this_job["recording"],
             this_sorting,
             waveforms_folder,
             ms_before=ms_buffer,
             ms_after=ms_buffer,
             overwrite=True,
+            sparse=True,
         )
     except ValueError as e:
-        print("Error extracting waveforms:", e)
         import spikeinterface.curation as scur
+
+        print("Error extracting waveforms:", e)
 
         remove_excess_spikes_recording = scur.remove_excess_spikes(
             this_sorting, this_job["recording"]
         )
 
-        # loaded_recording.set_probe(probe)
-        we = si.extract_waveforms(
+        we = await asyncio.to_thread(
+            si.extract_waveforms,
             remove_excess_spikes_recording,
             this_sorting,
             waveforms_folder,
             overwrite=True,
+            sparse=True,
         )
 
-    export_to_phy(
+    print(f"Worker {ii} finished extracting waveforms, exporting to Phy format...")
+
+    # Export to Phy format asynchronously
+    await asyncio.to_thread(
+        export_to_phy,
         we,
         output_folder=phy_folder,
         compute_pc_features=False,
@@ -534,32 +557,29 @@ def extract_sorting_result(this_sorting, this_config, this_job, ii):
         verbose=False,
     )
 
-    # move all sorter_output files into sorted_folder, then delete it
-    shutil.copytree(
-        Path(this_config["Sorting"]["sorted_folder"]) / "sorter_output",
-        Path(this_config["Sorting"]["sorted_folder"]),
-        dirs_exist_ok=True,
-    )
-    shutil.rmtree(
-        Path(this_config["Sorting"]["sorted_folder"]) / "sorter_output",
-        ignore_errors=True,
+    print(
+        f"Worker {ii} finished exporting to Phy format, consolidating files into final folder..."
     )
 
-    # move all phy files into sorted_folder, overwriting any existing duplicate files, then delete it
-    shutil.copytree(
-        phy_folder,
-        Path(this_config["Sorting"]["sorted_folder"]),
-        dirs_exist_ok=True,
-    )
+    # Move all files and subdirectories from sorter_output and phy_folder into sorted_folder
+    sorter_output = sorted_folder / "sorter_output"
+    # await asyncio.to_thread(movetree, sorter_output, sorted_folder)
+    # await asyncio.to_thread(movetree, phy_folder, sorted_folder)
+    # await asyncio.to_thread(shutil.rmtree, sorter_output, ignore_errors=True)
+    # await asyncio.to_thread(shutil.rmtree, phy_folder, ignore_errors=True)
+    movetree(sorter_output, sorted_folder)
+    movetree(phy_folder, sorted_folder)
+    shutil.rmtree(sorter_output, ignore_errors=True)
     shutil.rmtree(phy_folder, ignore_errors=True)
 
-    # move results into file folder for storage
+    # Move results into file folder for storage
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
     Th_this_config = (
         this_config["KS"]["Th_learned"],
         this_config["KS"]["Th_universal"],
         tuple(this_config["KS"]["Th_single_ch"]),
     )
+
     # if no gridsearch was done, do not use the params_suffix
     if this_config["Sorting"]["do_KS_param_gridsearch"] == 0:
         params_suffix = ""
@@ -567,41 +587,33 @@ def extract_sorting_result(this_sorting, this_config, this_job, ii):
         params_suffix = (
             f"Th_{Th_this_config[0]},{Th_this_config[1]}_spkTh_{Th_this_config[2]})"
         )
-    # export the KS parameter keys that were gridsearched to the filename as Param1-Vals1_Param2-Vals2
-    # params_suffix = "_".join(
-    #     [
-    #         f"{key}-{val}"
-    #         for key, val in iParams[ii].items()
-    #         if key in this_config["Sorting"]["gridsearch_KS_params"]
-    #     ]
-    # )
-    final_filename = f'{str(Path(this_config["Sorting"]["sorted_folder"])).split("_wkr")[0]}_{params_suffix}'
-    # insert the timestamp after sorted_
+    # add timestamp to the final filename
+    final_filename = f'{str(sorted_folder).split("_wkr")[0]}_{params_suffix}'
     final_filename = final_filename.replace("sorted_", f"sorted_{time_stamp_us}_")
-    # if only 1 group, remove _g0 from the filename
+    # remove _g0 if there is only one group
     if len(this_config["Group"]["emg_chan_list"]) == 1:
         final_filename = final_filename.replace("_g0", "")
-    # remove whitespace and parens from the filename
+    # remove any spaces or parentheses from the filename
     final_filename = Path(final_filename)
     final_filename = final_filename.with_name(final_filename.name.replace(" ", ""))
     final_filename = final_filename.with_name(final_filename.name.replace("(", ""))
     final_filename = final_filename.with_name(final_filename.name.replace(")", ""))
     final_filename = str(final_filename)
-    # remove any trailing comma or underscore from the filename
+    # remove any trailing commas or underscores
     while final_filename[-1] in [",", "_"]:
         final_filename = final_filename[:-1]
 
-    # rename the folder to preserve the latest sorting results in the sorted_g#_wkr# folder
-    # also make a new sorter_output_HHMMSSffffff folder with a timestamp
+    # Rename the folder to preserve the latest sorting results
+    # await asyncio.to_thread(shutil.move, this_config["Sorting"]["sorted_folder"], final_filename)
     shutil.move(this_config["Sorting"]["sorted_folder"], final_filename)
-    # dump this_config into the final folder of each sort
+
+    # Dump this_config and save other required files
     dump_yaml(Path(final_filename).joinpath("emu_config.yaml"), this_config)
-    # save the this_config["emg_chans_used"] to a npy file in the final folder
     np.save(
         Path(final_filename).joinpath("emg_chans_used.npy"),
         this_config["emg_chans_used"],
     )
-    # print for user to copy and paste into terminal if desired
+    # Print for the user to copy and paste into terminal if desired
     print(f"\nTo view in Phy, run:\nphy template-gui {final_filename}/params.py\n")
 
 
@@ -616,6 +628,25 @@ def run_KS_sorting(job_list, these_configs):
     Returns:
     - None
     """
+
+    async def extract_concurrently(max_concurrent_tasks=5):
+        print("Extracting sorting results asynchronously...")
+        # Create a task for each worker job
+        tasks = []
+        for ii, sorting in enumerate(sortings):
+            task = extract_sorting_result(sorting, these_configs[ii], job_list[ii], ii)
+            tasks.append(task)
+
+        # Chunk tasks into batches of 5
+        for i in range(0, len(tasks), max_concurrent_tasks):
+            batch = tasks[i : i + max_concurrent_tasks]
+            # Run the current batch concurrently
+            await asyncio.gather(*batch)
+            # Print progress
+            print(
+                f"Finished extracting results for worker batch {i//max_concurrent_tasks + 1}/{len(tasks)//max_concurrent_tasks}."
+            )
+
     ## job_list is of below structure:
     # job_list = [
     #     {
@@ -633,23 +664,7 @@ def run_KS_sorting(job_list, these_configs):
         return_output=True,
     )
 
-    # Now extract and write the sorting results to each sorted_folder
-    if these_configs[0]["Sorting"]["num_KS_jobs"] > 1:
-        try:
-            # do this in parallel using Pool
-            with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
-                pool.starmap(
-                    extract_sorting_result,
-                    zip(sortings, these_configs, job_list, range(len(job_list))),
-                )
-        except (
-            NameError
-        ):  # this is to catch a Windows error where these_configs is not defined in the worker
-            for ii, sorting in enumerate(sortings):
-                extract_sorting_result(sorting, these_configs[ii], job_list[ii], ii)
-    else:
-        # only run one job, since num_KS_jobs is set to 1
-        extract_sorting_result(sortings[0], these_configs[0], job_list[0], 0)
+    asyncio.run(extract_concurrently(max_concurrent_tasks=5))
 
 
 def main():
@@ -678,12 +693,6 @@ def main():
     parser.add_argument(
         "-s", "--sort", action="store_true", help="Perform spike sorting"
     )
-    # parser.add_argument(
-    #     "-p",
-    #     "--phy",
-    #     action="store_true",
-    #     help="Open Phy GUI for the specified folder datestring. Defaults to latest folder without datestring.",
-    # )
 
     args = parser.parse_args()
 
@@ -719,14 +728,8 @@ def main():
         }
     )
 
-    if full_config["Sorting"]["num_KS_jobs"] > 1:
-        print(
-            "Because num_KS_jobs > 1, cannot use more than 1 core for spikeinterface global job kwargs. Setting n_jobs=1."
-        )
-        full_config["SI"]["n_jobs"] = 1
-
     si.set_global_job_kwargs(
-        n_jobs=full_config["SI"]["n_jobs"],
+        n_jobs=1,
         chunk_duration=full_config["SI"]["chunk_duration"],
     )
 
