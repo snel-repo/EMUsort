@@ -5,7 +5,7 @@
 ### command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography
 
 - Use a central config file to control all parameters
-- Capable of automatically handling Intan, OpenEphys, NWB, and Binary datasets
+- Capable of automatically handling Intan, OpenEphys, NWB, Blackrock, and Binary datasets
   - Combine recordings into single object for unified processing
   - Remove broken or noisy channels automatically
   - Perform spike sorting with a modified version of Kilosort4 for 5-10% accuracy boost (see paper)
@@ -92,7 +92,7 @@ If a conda environment was used, activate it using
 ### Session Folder Structure
 
 EMUsort relies on a main "session folder", which contains the below 4 items.
-- For Intan, NWB, or Binary datasets, all you need to do is create a new session folder to contain your desired dataset files (Item #1 below)
+- For Intan, NWB, Blackrock, or Binary datasets, all you need to do is create a new session folder to contain your desired dataset files (Item #1 below). Note that nested folders are fine but use the leaf folder.
 - For Open Ephys, the session folder itself (dated folder containing 'Record Node ###') will act as the session folder. The original dataset files will not be modified.
 
 Items #2-4, will be generated automatically inside the provided session folder.
@@ -100,17 +100,18 @@ Items #2-4, will be generated automatically inside the provided session folder.
 1. Data files (several dataset formats are supported)
    - Intan RHD/RHS files
    - NWB files
+   - Blackrock files
    - Binary recording files
    - Record Node ### (if using OpenEphys session folder)
 2. `emu_config.yaml` file
-   - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command-line option
+   - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command-line option. Within the config file, please note that you will have to change the `dataset_type` attribute to match your desired dataset type. Once you generate the default config template, please review it and utilize the comments as documentation to guide your actions
 3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_Th#_spkTh#` folders (tagged with datetime stamp, group ID, session folder name, and parameters used)
    - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']`). The corresponding channel indexes for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` is also dumped for future reference, which also includes channel indexes used in each sort as `emg_chans_used`.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
 
 ### Example Folder Tree
-#### Intan, NWB, and Binary datasets:
+#### Intan, NWB, Blackrock, and Binary datasets:
 
 ![Alt text](images/folder_tree_structure.png)
 
