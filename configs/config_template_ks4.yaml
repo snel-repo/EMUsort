@@ -63,9 +63,6 @@ KS:
     remove_spike_outliers: false # EMUsort setting, will use HDBSCAN to remove outlier isolated spikes during initialization
     batch_size: 60000
     nblocks: 0
-    Th_universal:
-    Th_learned:
-    Th_single_ch:
     do_CAR: true
     invert_sign: false
     nt: 61

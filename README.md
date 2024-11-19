@@ -4,11 +4,11 @@
 
 ### command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography
 
-- Use a central config file to control all parameters
+- Perform spike sorting with a modified version of Kilosort4 for 5-10% accuracy boost (see paper)
+- Use a central configuration file to control all parameters
 - Capable of automatically handling Intan, OpenEphys, NWB, Blackrock, and Binary datasets
   - Combine recordings into single object for unified processing
   - Remove broken or noisy channels automatically
-  - Perform spike sorting with a modified version of Kilosort4 for 5-10% accuracy boost (see paper)
   - Export results and easily view in Phy
 
 ## Installation
@@ -39,9 +39,9 @@ If your cloned repo ever becomes out of date, you should likely pull updates fro
 
     git pull && git submodule update
 
-After updating, if you encounter any issues with the configuration file afterwards, you may need to reset it to default by running:
+If you are updating and already previously installed EMUsort, you may encounter issues with the configuration file (if it's structure changed). If this happens, you can reset it to the default configuration file by running:
 
-    python emusort.py --folder /path/to/session_folder --reset-config
+    emusort --folder /path/to/session_folder --reset-config
 
 ### Python Environment Creation
 
@@ -123,32 +123,32 @@ Items #2-4, will be generated automatically inside the provided session folder.
 
 To show a helpful summary of EMUsort commands:
 
-    python emusort.py --help
+    emusort --help
 
 To simply generate a config file (if it doesn't exist), navigate into the `EMUsort` repo folder and run (absolute/relative paths are both acceptable):
 
-    python emusort.py --folder /path/to/session_folder
+    emusort --folder /path/to/session_folder
 
 Editing the main configuration file can be done by running the command below (will be generated if it doesn't exist):
 
-    python emusort.py --folder /path/to/session_folder --config
+    emusort --folder /path/to/session_folder --config
 
 To run a sort on the dataset(s) in the session folder, run:
 
-    python emusort.py --folder /path/to/session_folder --sort
+    emusort --folder /path/to/session_folder --sort
 
 If a problem occurs with your `emu_config.py` file and you would like to reset to the default, run:
 
-    python emusort.py --folder /path/to/session_folder --reset-config
+    emusort --folder /path/to/session_folder --reset-config
 
-To perform multiple operations in sequence, you can append any combination of the below commands to the command-line after `python emusort.py`
+To perform multiple operations in sequence, you can append any combination of the below commands to the command-line after `emusort`
 
     --folder, -f
     --config, -c
     --sort, -s
     --reset-config, --r
 
-For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `python emusort.py --reset-config -csf /path/to/session_folder`
+For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `emusort -f /path/to/session_folder -cs --r`
 
 ### Inspecting and Curating with `phy`
 
@@ -180,6 +180,8 @@ Be aware of the combinatorics so you don't generate more sorts than you expected
 
 ## Final Notes
 
-If there are any discrepancies in the instructions or any problems with the comments/code, please let us know by submitting an issue on GitHub.
+If there are any discrepancies in the instructions or any problems with the comments/code, please submitt an issue on GitHub so we can try to address the issue ASAP.
 
-Thank you for trying out `EMUsort`! If you find it helpful (or simply love emus), shoot us a ⭐️
+If you find it helpful (or just love emus), feel free to let us know with a shooting ⭐️
+
+Thanks for trying out `EMUsort`!
