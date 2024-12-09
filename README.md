@@ -180,8 +180,6 @@ Be aware of the combinatorics so you don't generate more sorts than you expected
 
 ## Final Notes
 
-If there are any discrepancies in the instructions or any problems with the comments/code, please submitt an issue on GitHub so we can try to address the issue ASAP.
-
-If you find it helpful (or just love emus), feel free to let us know with a shooting ⭐️
+If there are any discrepancies in the instructions or any problems with the comments/code, please submit an issue on GitHub so we can try to address the issue ASAP.
 
 Thanks for trying out `EMUsort`!
