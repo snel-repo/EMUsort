@@ -176,6 +176,36 @@ def load_ephys_data(
             stream_id=str(config["Data"]["openephys_stream_id"]),
             block_index=config["Data"]["openephys_experiment_id"],
         )
+
+    # blackrock dataset
+    elif dataset_type == "blackrock":
+
+        print("Running Blackrock Read Code...")
+
+        # debug = sorted(Path(session_folder).iterdir())
+
+        # Get list of Blackrock .nsX files
+        nsx_files = [
+            nsx_file
+            for nsx_file in sorted(Path(session_folder).iterdir())
+            if nsx_file.suffix.lower()
+            in [".ns1", ".ns2", ".ns3", ".ns4", ".ns5", ".ns6"]
+        ]
+
+        print("Found nsx files:", nsx_files)
+
+        if config["Data"]["emg_recordings"][0] == "all":
+            chosen_nsx_files = nsx_files
+        else:
+            chosen_nsx_files = [nsx_files[i] for i in config["Data"]["emg_recordings"]]
+
+        # Load Blackrock data
+        loaded_recording_list = []
+        for nsx_file in chosen_nsx_files:
+            loaded_recording_list.append(se.read_blackrock(str(nsx_file)))
+
+        loaded_recording = si.append_recordings(loaded_recording_list)
+
     elif dataset_type == "intan":
         # get list of intan recordings
         rhd_and_rhs_files = [
@@ -644,7 +674,7 @@ def run_KS_sorting(job_list, these_configs):
             await asyncio.gather(*batch)
             # Print progress
             print(
-                f"Finished extracting results for worker batch {i//max_concurrent_tasks + 1}/{len(tasks)//max_concurrent_tasks}."
+                f"Finished extracting results for worker batch {i//max_concurrent_tasks + 1}/{len(tasks)//max_concurrent_tasks + 1}."
             )
 
     ## job_list is of below structure:

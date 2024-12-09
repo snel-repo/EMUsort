@@ -4,11 +4,11 @@
 
 ### command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography
 
-- Use a central config file to control all parameters
-- Capable of automatically handling Intan, OpenEphys, NWB, and Binary datasets
+- Perform spike sorting with a modified version of Kilosort4 for 5-10% accuracy boost (see paper)
+- Use a central configuration file to control all parameters
+- Capable of automatically handling Intan, OpenEphys, NWB, Blackrock, and Binary datasets
   - Combine recordings into single object for unified processing
   - Remove broken or noisy channels automatically
-  - Perform spike sorting with a modified version of Kilosort4 for 5-10% accuracy boost (see paper)
   - Export results and easily view in Phy
 
 ## Installation
@@ -39,9 +39,9 @@ If your cloned repo ever becomes out of date, you should likely pull updates fro
 
     git pull && git submodule update
 
-After updating, if you encounter any issues with the configuration file afterwards, you may need to reset it to default by running:
+If you are updating and already previously installed EMUsort, you may encounter issues with the configuration file (if it's structure changed). If this happens, you can reset it to the default configuration file by running:
 
-    python emusort.py --folder /path/to/session_folder --reset-config
+    emusort --folder /path/to/session_folder --reset-config
 
 ### Python Environment Creation
 
@@ -92,7 +92,7 @@ If a conda environment was used, activate it using
 ### Session Folder Structure
 
 EMUsort relies on a main "session folder", which contains the below 4 items.
-- For Intan, NWB, or Binary datasets, all you need to do is create a new session folder to contain your desired dataset files (Item #1 below)
+- For Intan, NWB, Blackrock, or Binary datasets, all you need to do is create a new session folder to contain your desired dataset files (Item #1 below). Note that nested folders are fine but use the leaf folder.
 - For Open Ephys, the session folder itself (dated folder containing 'Record Node ###') will act as the session folder. The original dataset files will not be modified.
 
 Items #2-4, will be generated automatically inside the provided session folder.
@@ -100,17 +100,18 @@ Items #2-4, will be generated automatically inside the provided session folder.
 1. Data files (several dataset formats are supported)
    - Intan RHD/RHS files
    - NWB files
+   - Blackrock files
    - Binary recording files
    - Record Node ### (if using OpenEphys session folder)
 2. `emu_config.yaml` file
-   - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command-line option
+   - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command-line option. Within the config file, please note that you will have to change the `dataset_type` attribute to match your desired dataset type. Once you generate the default config template, please review it and utilize the comments as documentation to guide your actions
 3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_Th#_spkTh#` folders (tagged with datetime stamp, group ID, session folder name, and parameters used)
    - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']`). The corresponding channel indexes for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` is also dumped for future reference, which also includes channel indexes used in each sort as `emg_chans_used`.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
 
 ### Example Folder Tree
-#### Intan, NWB, and Binary datasets:
+#### Intan, NWB, Blackrock, and Binary datasets:
 
 ![Alt text](images/folder_tree_structure.png)
 
@@ -122,32 +123,32 @@ Items #2-4, will be generated automatically inside the provided session folder.
 
 To show a helpful summary of EMUsort commands:
 
-    python emusort.py --help
+    emusort --help
 
 To simply generate a config file (if it doesn't exist), navigate into the `EMUsort` repo folder and run (absolute/relative paths are both acceptable):
 
-    python emusort.py --folder /path/to/session_folder
+    emusort --folder /path/to/session_folder
 
 Editing the main configuration file can be done by running the command below (will be generated if it doesn't exist):
 
-    python emusort.py --folder /path/to/session_folder --config
+    emusort --folder /path/to/session_folder --config
 
 To run a sort on the dataset(s) in the session folder, run:
 
-    python emusort.py --folder /path/to/session_folder --sort
+    emusort --folder /path/to/session_folder --sort
 
 If a problem occurs with your `emu_config.py` file and you would like to reset to the default, run:
 
-    python emusort.py --folder /path/to/session_folder --reset-config
+    emusort --folder /path/to/session_folder --reset-config
 
-To perform multiple operations in sequence, you can append any combination of the below commands to the command-line after `python emusort.py`
+To perform multiple operations in sequence, you can append any combination of the below commands to the command-line after `emusort`
 
     --folder, -f
     --config, -c
     --sort, -s
     --reset-config, --r
 
-For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `python emusort.py --reset-config -csf /path/to/session_folder`
+For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `emusort -f /path/to/session_folder -cs --r`
 
 ### Inspecting and Curating with `phy`
 
@@ -179,6 +180,6 @@ Be aware of the combinatorics so you don't generate more sorts than you expected
 
 ## Final Notes
 
-If there are any discrepancies in the instructions or any problems with the comments/code, please let us know by submitting an issue on GitHub.
+If there are any discrepancies in the instructions or any problems with the comments/code, please submit an issue on GitHub so we can try to address the issue ASAP.
 
-Thank you for trying out `EMUsort`! If you find it helpful (or simply love emus), shoot us a ⭐️
+Thanks for trying out `EMUsort`!

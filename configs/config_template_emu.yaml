@@ -4,7 +4,7 @@
 # Dataset parameters
 # provide information specific to the dataset you want to sort
 Data:
-    dataset_type: 'openephys' # can be 'openephys', 'nwb', 'intan' or 'binary'
+    dataset_type: 'openephys' # can be 'openephys', 'nwb', 'blackrock', 'intan' or 'binary'
     # below two settings are only used when 'openephys' dataset_type is chosen
     openephys_experiment_id: 0 # for openephys recordings with several experiment per session, index of the experiment to use (corresponds to "block_index" in spikeinterface)
     openephys_stream_id: 0 # for openephys recordings with several streams, index of the stream to use
@@ -63,9 +63,6 @@ KS:
     remove_spike_outliers: true # EMUsort setting, will use HDBSCAN to remove outlier isolated spikes during initialization
     batch_size: 60000
     nblocks: 0
-    Th_universal:
-    Th_learned:
-    Th_single_ch:
     do_CAR: false
     invert_sign: false
     nt: 61
