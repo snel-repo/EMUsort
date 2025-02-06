@@ -674,7 +674,7 @@ def run_KS_sorting(job_list, these_configs):
             await asyncio.gather(*batch)
             # Print progress
             print(
-                f"Finished extracting results for worker batch {i//max_concurrent_tasks + 1}/{len(tasks)//max_concurrent_tasks + 1}."
+                f"Finished extracting results for worker batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}."
             )
 
     ## job_list is of below structure:
