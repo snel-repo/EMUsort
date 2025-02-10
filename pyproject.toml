@@ -16,9 +16,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 # pull version from git tag
-write_to = "emusort/_version.py"
-version_scheme = "guess-next-dev"
-local_scheme = "dirty-tag"
+version_file = "emusort/_version.py"
 
 [project.urls]
 Homepage = "https://github.com/snel-repo/EMUsort"
