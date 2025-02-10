@@ -1,8 +1,3 @@
-[build-system]
-requires = ["setuptools>=42", "wheel", "setuptools_scm"]
-
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "emusort"
 dynamic = ["version"]
@@ -14,6 +9,16 @@ authors = [
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
+
+[build-system]
+requires = ["setuptools>=42", "wheel", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+# pull version from git tag
+write_to = "emusort/_version.py"
+version_scheme = "guess-next-dev"
+local_scheme = "dirty-tag"
 
 [project.urls]
 Homepage = "https://github.com/snel-repo/EMUsort"
