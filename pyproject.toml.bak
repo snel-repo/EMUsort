@@ -1,0 +1,27 @@
+[project]
+name = "emusort"
+dynamic = ["version"]
+description = "A command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography"
+requires-python = ">=3.5" # Specify the minimum Python version
+authors = [
+    { name = "Sean O'Connell", email = "smarkoco@proton.me" },
+    { name = "Jonathan A Michaels", email = "jmichae@yorku.ca" },
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+
+[build-system]
+requires = ["setuptools>=62", "wheel", "setuptools_scm[toml]>=6.3"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["emusort", "emusort.Kilosort4"] # List of packages to include in the distribution
+
+[tool.setuptools_scm]
+version_file = "src/emusort/_version.py" # Path to the file that will store the version number
+
+[project.urls]
+Homepage = "https://github.com/snel-repo/EMUsort"
+
+[project.scripts]
+emusort = "emusort.emusort:main" # Entry point for your command-line tool
