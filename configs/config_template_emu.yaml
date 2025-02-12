@@ -48,12 +48,12 @@ Sorting:
 # channel groups are sorted separately (used for single muscles), rows of each parameter define settings for each group
 Group:
     emg_chan_list: # Which channels to sort, zero-indexed (can be [all] or a list of integers, e.g., [0,1,2,5,6])
-        - [0,1,2,3,4,5,6,7]
-        #- [all] # this row defines channels to use for the second group
+        - [all] # default setting to include all channels
+        #- [0,1,2,3,4,5,6,7] # this row defines channels to use for the second group
         #- [8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31] # third group
-    remove_bad_emg_chans: # false to disable, or a string for the method. Can be 'coherence+psd', 'mad', 'std', 'mad#', or 'std#', where # is the cutoff threshold (true defaults to 'mad5'). See spikeinterface's detect_bad_channels() method for more info.
+    remove_bad_emg_chans: # false to disable, or a string for the method. Can be 'coherence+psd', 'mad', 'std', 'mad#', or 'std#', where # is the desired threshold (int/float, true defaults to 'mad5'). See spikeinterface's detect_bad_channels() method for more info.
         - false
-        #- true # if true, the second group would have bad chans removed by 'mad' method
+        #- true # if true, the second group would have bad chans removed by 'mad5' method
         #- std4 # if 'std4', the third group would have bad chans removed by 'std' method with threshold 4
 
 # Kilosort parameters
@@ -96,3 +96,4 @@ KS:
 # SpikeInterface parameters
 SI:
     chunk_duration: '1s' # Chunk duration in seconds if float or with units if str (e.g. '1s', '500ms')
+    max_concurrent_tasks: 4 # Maximum number of concurrent tasks to run in parallel (lower this if you get "Too many open files" error)

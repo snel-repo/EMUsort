@@ -15,7 +15,6 @@ import os
 import shutil
 import subprocess
 from copy import deepcopy
-from multiprocessing import Pool
 from pathlib import Path
 from typing import Union
 
@@ -24,10 +23,21 @@ import spikeinterface as si
 import spikeinterface.extractors as se
 import spikeinterface.preprocessing as spre
 import spikeinterface.sorters as ss
-from probeinterface import Probe  # , get_probe
+from probeinterface import Probe
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 from spikeinterface.exporters import export_to_phy
+from spikeinterface.postprocessing import compute_spike_amplitudes
+from spikeinterface.qualitymetrics.misc_metrics import (
+    compute_amplitude_cutoffs,
+    compute_firing_ranges,
+    compute_firing_rates,
+    compute_num_spikes,
+    compute_presence_ratios,
+    compute_refrac_period_violations,
+    compute_sd_ratio,
+    compute_snrs,
+)
 from torch.cuda import is_available
 
 
@@ -364,18 +374,24 @@ def preprocess_ephys_data(
         recording_filtered = recording_filtered.set_probe(probe)
         # input can be either "mad" or "coherence+psd", but users may input mad# where # is a number
         # setting the threshold
-        numeric_idxs = np.nonzero([i.isdigit() for i in remove_bad_emg_chans])[0]
+        numeric_idxs = np.nonzero(
+            [(i.isdigit() or i == ".") for i in remove_bad_emg_chans]
+        )[0]
         num_digits = len(numeric_idxs)
         if num_digits > 0:
-            if num_digits > 1:
-                assert (
-                    np.diff(numeric_idxs).all() == 1
-                ), f"Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. If using a threshold, it must be a number after the method string."
+            assert float(remove_bad_emg_chans[numeric_idxs[0] :]) > 0, (
+                f"Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. "
+                "If using a threshold, it must be a positive float after the method string."
+            )
+            # if num_digits > 1:
+            #     assert (
+            #         np.diff(numeric_idxs).all() == 1
+            #     ), f"Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. If using a threshold, it must be a number after the method string."
             method_str = remove_bad_emg_chans[: numeric_idxs[0]]
             assert (
                 method_str != "coherence+psd"
             ), f'Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. "coherence+psd" method does not take a threshold value.'
-            threshold = int(remove_bad_emg_chans[numeric_idxs[0] :])
+            threshold = float(remove_bad_emg_chans[numeric_idxs[0] :])
         else:
             method_str = remove_bad_emg_chans
             threshold = 5
@@ -573,9 +589,120 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
             overwrite=True,
             sparse=True,
         )
+    print(f"Worker {ii} finished extracting waveforms, computing quality metrics...")
+    # Compute sorting quality metrics
+    # Check Type I errors (false positives)
+    # isi_viol_ratio, isi_viol_count = compute_isi_violations(
+    #     we,
+    #     isi_threshold_ms=2.0,
+    #     min_isi_ms=0,
+    # )
+    rp_contamination, rp_violations = compute_refrac_period_violations(
+        we,
+        refractory_period_ms=2.0,
+        censored_period_ms=0.0,
+    )
+    rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
 
-    print(f"Worker {ii} finished extracting waveforms, exporting to Phy format...")
+    _ = compute_spike_amplitudes(we, peak_sign="both")
+    num_spikes = compute_num_spikes(
+        we,
+    )
+    rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
+        1 + np.fromiter(num_spikes.values(), int)
+    )
+    type_I_scores = rp_violation_fraction_scores * rp_contamination_scores
+    # type_I_score = type_I_scores.mean()
 
+    # Check Type II errors (false negatives)
+    presence_ratios = compute_presence_ratios(
+        we, bin_duration_s=20.0, mean_fr_ratio_thresh=0.5
+    )
+    presence_ratio_scores = np.fromiter(presence_ratios.values(), float)
+
+    amplitude_cutoffs = compute_amplitude_cutoffs(
+        we,
+        peak_sign="both",
+        num_histogram_bins=32,
+    )
+    amplitude_Gaussianity_scores = 1 - np.fromiter(amplitude_cutoffs.values(), float)
+
+    type_II_scores = amplitude_Gaussianity_scores * presence_ratio_scores
+    # type_II_score = np.nanmean(type_II_scores)
+
+    # Check known MU properties
+    firing_rates = compute_firing_rates(
+        we,
+    )
+    firing_rate_viol_scores = 1 / (
+        1 + np.exp((np.fromiter(firing_rates.values(), float) + 1e-8) - 200)
+    )
+
+    firing_ranges = compute_firing_ranges(we, bin_size_s=0.5)
+    firing_range_viol_scores = 1 / (
+        1 + np.exp((np.fromiter(firing_ranges.values(), float) + 1e-8) - 200)
+    )
+    firing_rate_validity_scores = firing_rate_viol_scores * firing_range_viol_scores
+    # firing_rate_validity_score = firing_rate_validity_scores.mean()
+
+    snrs = compute_snrs(
+        we,
+        peak_sign="both",
+    )
+    sd_ratios = compute_sd_ratio(
+        we,
+        correct_for_drift=False,
+    )
+    # shape_noise_scores = 1 / np.fromiter(sd_ratios.values(), float)
+    norm_snr_scores = 1 - np.fromiter(sd_ratios.values(), float) / np.fromiter(
+        snrs.values(), float
+    )
+    # norm_snr_score = norm_snr_scores.mean()
+
+    # produce overall score, accounting for all quality metrics
+    emusort_scores = (
+        norm_snr_scores * firing_rate_validity_scores * type_I_scores * type_II_scores
+    )
+    emusort_score = np.nanmean(emusort_scores)
+
+    # print quality metrics
+    print(
+        f"Worker {ii} score report:\n"
+        f"Norm SNR scores:\n{norm_snr_scores}\n"
+        f"Type I error scores:\n{type_I_scores}\n"
+        f"Type II error scores:\n{type_II_scores}\n"
+        f"Firing rate validity:\n{firing_rate_validity_scores}\n"
+        f"EMUsort scores:\n{emusort_scores}\n"
+        f"Overall EMUsort score: {emusort_score:.3f}"
+    )
+
+    # clear up unused variables
+    del (
+        rp_contamination,
+        rp_violations,
+        rp_contamination_scores,
+        rp_violation_fraction_scores,
+        type_I_scores,
+        presence_ratios,
+        presence_ratio_scores,
+        amplitude_cutoffs,
+        amplitude_Gaussianity_scores,
+        type_II_scores,
+        firing_rates,
+        firing_rate_viol_scores,
+        firing_ranges,
+        firing_range_viol_scores,
+        firing_rate_validity_scores,
+        snrs,
+        sd_ratios,
+        norm_snr_scores,
+        emusort_scores,
+    )
+
+    print(f"Worker {ii} exporting to Phy format...")
+    # from pdb import set_trace
+
+    # set_trace()
     # Export to Phy format asynchronously
     await asyncio.to_thread(
         export_to_phy,
@@ -633,6 +760,8 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     while final_filename[-1] in [",", "_"]:
         final_filename = final_filename[:-1]
 
+    # append score to the final filename
+    final_filename += f"_SCORE_{emusort_score:.3f}"
     # Rename the folder to preserve the latest sorting results
     # await asyncio.to_thread(shutil.move, this_config["Sorting"]["sorted_folder"], final_filename)
     shutil.move(this_config["Sorting"]["sorted_folder"], final_filename)
@@ -659,7 +788,7 @@ def run_KS_sorting(job_list, these_configs):
     - None
     """
 
-    async def extract_concurrently(max_concurrent_tasks=5):
+    async def extract_concurrently(max_concurrent_tasks=4):
         print("Extracting sorting results asynchronously...")
         # Create a task for each worker job
         tasks = []
@@ -694,7 +823,11 @@ def run_KS_sorting(job_list, these_configs):
         return_output=True,
     )
 
-    asyncio.run(extract_concurrently(max_concurrent_tasks=5))
+    asyncio.run(
+        extract_concurrently(
+            max_concurrent_tasks=these_configs[0]["SI"]["max_concurrent_tasks"]
+        )
+    )
 
 
 def main():
