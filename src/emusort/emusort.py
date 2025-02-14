@@ -533,6 +533,89 @@ def concatenate_emg_data(
     return recording_concatenated
 
 
+def get_emusort_scores(we, ii):
+    ### Compute sorting quality metrics, Overall EMUsort score
+
+    ## Check Type I errors (false positives)
+    rp_contamination, rp_violations = compute_refrac_period_violations(
+        we,
+        refractory_period_ms=2.0,
+        censored_period_ms=0.0,
+    )
+    rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
+
+    _ = compute_spike_amplitudes(we, peak_sign="both")
+    num_spikes = compute_num_spikes(
+        we,
+    )
+    rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
+        1 + np.fromiter(num_spikes.values(), int)
+    )
+    type_I_scores = rp_violation_fraction_scores * rp_contamination_scores
+
+    ## Check Type II errors (false negatives)
+    presence_ratios = compute_presence_ratios(
+        we, bin_duration_s=20.0, mean_fr_ratio_thresh=0.5
+    )
+    presence_ratio_scores = np.fromiter(presence_ratios.values(), float)
+
+    amplitude_cutoffs = compute_amplitude_cutoffs(
+        we,
+        peak_sign="both",
+        num_histogram_bins=32,
+    )
+    amplitude_Gaussianity_scores = 1 - np.fromiter(amplitude_cutoffs.values(), float)
+
+    type_II_scores = amplitude_Gaussianity_scores * presence_ratio_scores
+
+    ## Check Firing Rates Validity Against Known MU properties (200Hz sigmoid dropoff)
+    firing_rates = compute_firing_rates(
+        we,
+    )
+    firing_rate_viol_scores = 1 / (
+        1 + np.exp((np.fromiter(firing_rates.values(), float) + 1e-8) - 200)
+    )
+    firing_ranges = compute_firing_ranges(we, bin_size_s=0.5)
+    firing_range_viol_scores = 1 / (
+        1 + np.exp((np.fromiter(firing_ranges.values(), float) + 1e-8) - 200)
+    )
+    firing_rate_validity_scores = firing_rate_viol_scores * firing_range_viol_scores
+    # gets ratio of largest peak to snippet standard deviation
+    snrs = compute_snrs(
+        we,
+        peak_sign="both",
+    )
+    # gets ratio of largest peak to snippet standard deviation
+    sd_ratios = compute_sd_ratio(
+        we,
+        correct_for_drift=False,
+    )
+    norm_snr_scores = 1 - np.fromiter(sd_ratios.values(), float) / np.fromiter(
+        snrs.values(), float
+    )
+
+    # produce overall score, accounting for all quality metrics
+    emusort_scores = (
+        norm_snr_scores * firing_rate_validity_scores * type_I_scores * type_II_scores
+    )
+    emusort_score = np.nanmean(emusort_scores)
+
+    # get quality metric report string for this worker
+    report = (
+        "------------------------------------------------------------\n"
+        f" Worker {ii} Quality Scores Report:\n"
+        f" Norm SNR scores:\n{norm_snr_scores}\n"
+        f" Type I error scores:\n{type_I_scores}\n"
+        f" Type II error scores:\n{type_II_scores}\n"
+        f" Firing rate validity:\n{firing_rate_validity_scores}\n"
+        f" EMUsort scores:\n{emusort_scores}\n"
+        "------------------------------------------------------------\n"
+        f" Worker {ii} Overall EMUsort score: {emusort_score:.3f}\n"
+        "------------------------------------------------------------\n"
+    )
+    return emusort_scores, emusort_score, report
+
+
 async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     """
     Asynchronous version of extract_sorting_result, offloading blocking I/O tasks to background threads.
@@ -566,11 +649,12 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
             si.extract_waveforms,
             this_job["recording"],
             this_sorting,
-            waveforms_folder,
+            # waveforms_folder,
+            mode="memory",
             ms_before=ms_buffer,
             ms_after=ms_buffer,
-            overwrite=True,
-            sparse=True,
+            # overwrite=True,
+            sparse=False,
         )
     except ValueError as e:
         import spikeinterface.curation as scur
@@ -585,124 +669,24 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
             si.extract_waveforms,
             remove_excess_spikes_recording,
             this_sorting,
-            waveforms_folder,
-            overwrite=True,
-            sparse=True,
+            # waveforms_folder,
+            mode="memory",
+            ms_before=ms_buffer,
+            ms_after=ms_buffer,
+            # overwrite=True,
+            sparse=False,
         )
     print(f"Worker {ii} finished extracting waveforms, computing quality metrics...")
-    # Compute sorting quality metrics
-    # Check Type I errors (false positives)
-    # isi_viol_ratio, isi_viol_count = compute_isi_violations(
-    #     we,
-    #     isi_threshold_ms=2.0,
-    #     min_isi_ms=0,
-    # )
-    rp_contamination, rp_violations = compute_refrac_period_violations(
+
+    # Compute quality metrics asynchronously
+    _, emusort_score, report = await asyncio.to_thread(
+        get_emusort_scores,
         we,
-        refractory_period_ms=2.0,
-        censored_period_ms=0.0,
-    )
-    rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
-
-    _ = compute_spike_amplitudes(we, peak_sign="both")
-    num_spikes = compute_num_spikes(
-        we,
-    )
-    rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
-        1 + np.fromiter(num_spikes.values(), int)
-    )
-    type_I_scores = rp_violation_fraction_scores * rp_contamination_scores
-    # type_I_score = type_I_scores.mean()
-
-    # Check Type II errors (false negatives)
-    presence_ratios = compute_presence_ratios(
-        we, bin_duration_s=20.0, mean_fr_ratio_thresh=0.5
-    )
-    presence_ratio_scores = np.fromiter(presence_ratios.values(), float)
-
-    amplitude_cutoffs = compute_amplitude_cutoffs(
-        we,
-        peak_sign="both",
-        num_histogram_bins=32,
-    )
-    amplitude_Gaussianity_scores = 1 - np.fromiter(amplitude_cutoffs.values(), float)
-
-    type_II_scores = amplitude_Gaussianity_scores * presence_ratio_scores
-    # type_II_score = np.nanmean(type_II_scores)
-
-    # Check known MU properties
-    firing_rates = compute_firing_rates(
-        we,
-    )
-    firing_rate_viol_scores = 1 / (
-        1 + np.exp((np.fromiter(firing_rates.values(), float) + 1e-8) - 200)
-    )
-
-    firing_ranges = compute_firing_ranges(we, bin_size_s=0.5)
-    firing_range_viol_scores = 1 / (
-        1 + np.exp((np.fromiter(firing_ranges.values(), float) + 1e-8) - 200)
-    )
-    firing_rate_validity_scores = firing_rate_viol_scores * firing_range_viol_scores
-    # firing_rate_validity_score = firing_rate_validity_scores.mean()
-
-    snrs = compute_snrs(
-        we,
-        peak_sign="both",
-    )
-    sd_ratios = compute_sd_ratio(
-        we,
-        correct_for_drift=False,
-    )
-    # shape_noise_scores = 1 / np.fromiter(sd_ratios.values(), float)
-    norm_snr_scores = 1 - np.fromiter(sd_ratios.values(), float) / np.fromiter(
-        snrs.values(), float
-    )
-    # norm_snr_score = norm_snr_scores.mean()
-
-    # produce overall score, accounting for all quality metrics
-    emusort_scores = (
-        norm_snr_scores * firing_rate_validity_scores * type_I_scores * type_II_scores
-    )
-    emusort_score = np.nanmean(emusort_scores)
-
-    # print quality metrics
-    print(
-        f"Worker {ii} score report:\n"
-        f"Norm SNR scores:\n{norm_snr_scores}\n"
-        f"Type I error scores:\n{type_I_scores}\n"
-        f"Type II error scores:\n{type_II_scores}\n"
-        f"Firing rate validity:\n{firing_rate_validity_scores}\n"
-        f"EMUsort scores:\n{emusort_scores}\n"
-        f"Overall EMUsort score: {emusort_score:.3f}"
-    )
-
-    # clear up unused variables
-    del (
-        rp_contamination,
-        rp_violations,
-        rp_contamination_scores,
-        rp_violation_fraction_scores,
-        type_I_scores,
-        presence_ratios,
-        presence_ratio_scores,
-        amplitude_cutoffs,
-        amplitude_Gaussianity_scores,
-        type_II_scores,
-        firing_rates,
-        firing_rate_viol_scores,
-        firing_ranges,
-        firing_range_viol_scores,
-        firing_rate_validity_scores,
-        snrs,
-        sd_ratios,
-        norm_snr_scores,
-        emusort_scores,
+        ii,
     )
 
     print(f"Worker {ii} exporting to Phy format...")
-    # from pdb import set_trace
 
-    # set_trace()
     # Export to Phy format asynchronously
     await asyncio.to_thread(
         export_to_phy,
@@ -772,8 +756,10 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
         Path(final_filename).joinpath("emg_chans_used.npy"),
         this_config["emg_chans_used"],
     )
-    # Print for the user to copy and paste into terminal if desired
-    print(f"\nTo view in Phy, run:\nphy template-gui {final_filename}/params.py\n")
+    # make the phy command string
+    phy_msg = f"\nTo view Worker {ii} result in Phy, run:\nphy template-gui {final_filename}/params.py\n"
+    # return 2 strings to print to console later
+    return [report, phy_msg]
 
 
 def run_KS_sorting(job_list, these_configs):
@@ -788,7 +774,7 @@ def run_KS_sorting(job_list, these_configs):
     - None
     """
 
-    async def extract_concurrently(max_concurrent_tasks=4):
+    async def extract_concurrently(sortings, max_concurrent_tasks=4):
         print("Extracting sorting results asynchronously...")
         # Create a task for each worker job
         tasks = []
@@ -797,14 +783,18 @@ def run_KS_sorting(job_list, these_configs):
             tasks.append(task)
 
         # Chunk tasks into batches of 5
+        msgs = []
         for i in range(0, len(tasks), max_concurrent_tasks):
             batch = tasks[i : i + max_concurrent_tasks]
             # Run the current batch concurrently
-            await asyncio.gather(*batch)
+            msgs.append(await asyncio.gather(*batch))
             # Print progress
             print(
                 f"Finished extracting results for worker batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}."
             )
+        # Flatten the list of messages
+        msgs = [msg for sublist in msgs for msg in sublist]
+        return msgs
 
     ## job_list is of below structure:
     # job_list = [
@@ -823,11 +813,13 @@ def run_KS_sorting(job_list, these_configs):
         return_output=True,
     )
 
-    asyncio.run(
+    msgs = asyncio.run(
         extract_concurrently(
-            max_concurrent_tasks=these_configs[0]["SI"]["max_concurrent_tasks"]
+            sortings,
+            max_concurrent_tasks=these_configs[0]["SI"]["max_concurrent_tasks"],
         )
     )
+    return msgs
 
 
 def main():
@@ -992,6 +984,7 @@ def main():
                 this_config["emg_chans_used"] = (
                     preproc_recording.get_channel_ids().tolist()
                 )
+                # this_config["KS"]["save_extra_vars"] = True
 
                 these_configs.append(this_config)
 
@@ -1004,7 +997,11 @@ def main():
                 }
                 for i in range(total_KS_jobs)
             ]
-            run_KS_sorting(job_list, these_configs)
+            msgs = run_KS_sorting(job_list, these_configs)
+            for msg in msgs:
+                print(msg[0])
+            for msg in msgs:
+                print(msg[1])
 
     # Print status and time elapsed
     print("Pipeline finished! You've earned a break.")
