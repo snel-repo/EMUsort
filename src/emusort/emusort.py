@@ -427,7 +427,6 @@ def preprocess_ephys_data(
     recording_notch = spre.notch_filter(
         recording_filtered, freq=60, q=30
     )  # Apply notch filter at 60 Hz
-
     # set a probe for the recording
     probe = create_probe(recording_notch)
     preprocessed_recording = recording_notch.set_probe(probe)
@@ -544,7 +543,7 @@ def get_emusort_scores(we, ii):
     )
     rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
 
-    _ = compute_spike_amplitudes(we, peak_sign="both")
+    scaled_amps = compute_spike_amplitudes(we, peak_sign="both")[0]
     num_spikes = compute_num_spikes(
         we,
     )
@@ -565,8 +564,11 @@ def get_emusort_scores(we, ii):
         num_histogram_bins=32,
     )
     amplitude_Gaussianity_scores = 1 - np.fromiter(amplitude_cutoffs.values(), float)
+    denan_amplitude_Gaussianity_scores = np.nan_to_num(
+        amplitude_Gaussianity_scores, nan=0 # if nan, replace with 0 (bad score due to too few spikes)
+    )
 
-    type_II_scores = amplitude_Gaussianity_scores * presence_ratio_scores
+    type_II_scores = denan_amplitude_Gaussianity_scores * presence_ratio_scores
 
     ## Check Firing Rates Validity Against Known MU properties (200Hz sigmoid dropoff)
     firing_rates = compute_firing_rates(
@@ -593,10 +595,15 @@ def get_emusort_scores(we, ii):
     norm_snr_scores = 1 - np.fromiter(sd_ratios.values(), float) / np.fromiter(
         snrs.values(), float
     )
+    # clip it 0 to 1 to prevent the plunge to negative infinity when the sd to snr ratio is > 1
+    clipped_norm_snr_scores = np.clip(norm_snr_scores, 0, 1)
 
     # produce overall score, accounting for all quality metrics
     emusort_scores = (
-        norm_snr_scores * firing_rate_validity_scores * type_I_scores * type_II_scores
+        clipped_norm_snr_scores
+        * firing_rate_validity_scores
+        * type_I_scores
+        * type_II_scores
     )
     emusort_score = np.nanmean(emusort_scores)
 
@@ -613,7 +620,16 @@ def get_emusort_scores(we, ii):
         f" Worker {ii} Overall EMUsort score: {emusort_score:.3f}\n"
         "------------------------------------------------------------\n"
     )
-    return emusort_scores, emusort_score, report
+    return (
+        norm_snr_scores,
+        firing_rate_validity_scores,
+        type_I_scores,
+        type_II_scores,
+        emusort_scores,
+        emusort_score,
+        report,
+        scaled_amps,
+    )
 
 
 async def extract_sorting_result(this_sorting, this_config, this_job, ii):
@@ -679,12 +695,33 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     print(f"Worker {ii} finished extracting waveforms, computing quality metrics...")
 
     # Compute quality metrics asynchronously
-    _, emusort_score, report = await asyncio.to_thread(
+    (
+        norm_snr_scores,
+        firing_rate_validity_scores,
+        type_I_scores,
+        type_II_scores,
+        emusort_scores,
+        emusort_score,
+        report,
+        scaled_amps,
+    ) = await asyncio.to_thread(
         get_emusort_scores,
         we,
         ii,
     )
-
+    # get channel noise levels
+    emg_chan_noise_levels = si.get_noise_levels(we.recording, method="mad")
+    this_config["emg_chan_noise"] = emg_chan_noise_levels.tolist()
+    # add Results section to this_config
+    this_config["Results"] = {}
+    this_config["Results"]["norm_snr_scores"] = norm_snr_scores.tolist()
+    this_config["Results"][
+        "firing_rate_validity_scores"
+    ] = firing_rate_validity_scores.tolist()
+    this_config["Results"]["type_I_scores"] = type_I_scores.tolist()
+    this_config["Results"]["type_II_scores"] = type_II_scores.tolist()
+    this_config["Results"]["emusort_scores"] = emusort_scores.tolist()
+    # this_config["Sorting"]["scaled_amps"] = scaled_amps.tolist() # this becomes too large to save
     print(f"Worker {ii} exporting to Phy format...")
 
     # Export to Phy format asynchronously
@@ -709,15 +746,17 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     # await asyncio.to_thread(shutil.rmtree, sorter_output, ignore_errors=True)
     # await asyncio.to_thread(shutil.rmtree, phy_folder, ignore_errors=True)
     movetree(sorter_output, sorted_folder)
-    movetree(phy_folder, sorted_folder)
+    # movetree(phy_folder, sorted_folder)
+    shutil.move(phy_folder / "recording.dat", sorted_folder / "recording.dat")
+    shutil.move(phy_folder / "params.py", sorted_folder / "params.py")
     shutil.rmtree(sorter_output, ignore_errors=True)
-    shutil.rmtree(phy_folder, ignore_errors=True)
+    # shutil.rmtree(phy_folder, ignore_errors=True)
 
     # Move results into file folder for storage
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
     Th_this_config = (
-        this_config["KS"]["Th_learned"],
         this_config["KS"]["Th_universal"],
+        this_config["KS"]["Th_learned"],
         tuple(this_config["KS"]["Th_single_ch"]),
     )
 
@@ -757,7 +796,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
         this_config["emg_chans_used"],
     )
     # make the phy command string
-    phy_msg = f"\nTo view Worker {ii} result in Phy, run:\nphy template-gui {final_filename}/params.py\n"
+    phy_msg = f"\nTo view Worker {ii} result in Phy, run:\nphy template-gui {str(Path(final_filename).joinpath('params.py'))}\n"
     # return 2 strings to print to console later
     return [report, phy_msg]
 
@@ -782,15 +821,24 @@ def run_KS_sorting(job_list, these_configs):
             task = extract_sorting_result(sorting, these_configs[ii], job_list[ii], ii)
             tasks.append(task)
 
-        # Chunk tasks into batches of 5
+        # Chunk tasks into smaller batches to avoid "too many open files" error
         msgs = []
         for i in range(0, len(tasks), max_concurrent_tasks):
-            batch = tasks[i : i + max_concurrent_tasks]
-            # Run the current batch concurrently
-            msgs.append(await asyncio.gather(*batch))
-            # Print progress
+            try:
+                # Run the current batch concurrently
+                batch = [
+                    asyncio.create_task(task)
+                    for task in tasks[i : i + max_concurrent_tasks]
+                ]
+                msgs.append(await asyncio.gather(*batch))
+            except Exception as e:
+                raise Exception(
+                    f"Error in parallel extraction of batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}, try reducing max_concurrent_tasks in 'SI' section of emu_config.yaml next time. ..."
+                ) from e
             print(
-                f"Finished extracting results for worker batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}."
+                "------------------------------------------------------------\n"
+                f"All tasks done for worker batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}. Yay!\n"
+                "------------------------------------------------------------\n"
             )
         # Flatten the list of messages
         msgs = [msg for sublist in msgs for msg in sublist]
@@ -967,8 +1015,8 @@ def main():
                 this_config["Sorting"]["sorted_folder"] = tmp_sorted_folder
                 # check for keys first
                 if "Th" in iParams[iW]:
-                    this_config["KS"]["Th_learned"] = iParams[iW]["Th"][0]
-                    this_config["KS"]["Th_universal"] = iParams[iW]["Th"][1]
+                    this_config["KS"]["Th_universal"] = iParams[iW]["Th"][0]
+                    this_config["KS"]["Th_learned"] = iParams[iW]["Th"][1]
                 if "spkTh" in iParams[iW]:
                     this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
                 this_config["num_chans"] = preproc_recording.get_num_channels()
@@ -984,7 +1032,6 @@ def main():
                 this_config["emg_chans_used"] = (
                     preproc_recording.get_channel_ids().tolist()
                 )
-                # this_config["KS"]["save_extra_vars"] = True
 
                 these_configs.append(this_config)
 
