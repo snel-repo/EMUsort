@@ -28,18 +28,18 @@ Sorting:
     # when do_KS_param_gridsearch is false, only the first rows of each parameter are used (default)
     do_KS_param_gridsearch: false
     gridsearch_KS_params: # 
-        Th: # in format [Th_learned, Th_universal] for each element
+        Th: # in format [Th_universal, Th_learned] for each element
             - [9, 8]
             - [10, 4]
             - [7, 3]
             - [5, 2]
             - [2, 1]
         spkTh: # Th_single_ch
+            - [3]
             - [6]
-            - [4.5]
-            - [7.5]
             - [9]
-            - [10.5]
+            - [12]
+            - [15]
 # Group-specific parameters
 # channel groups are sorted separately, rows of each parameter define settings for each group
 Group:
@@ -55,9 +55,6 @@ KS:
     remove_chan_delays: false # this setting is added to KS4 for EMUsort
     batch_size: 60000
     nblocks: 0
-    Th_universal:
-    Th_learned:
-    Th_single_ch:
     do_CAR: true
     invert_sign: false
     nt: 61

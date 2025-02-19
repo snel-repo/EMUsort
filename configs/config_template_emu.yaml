@@ -56,9 +56,6 @@ KS:
     remove_chan_delays: true # this setting is added to KS4 for EMUsort
     batch_size: 60000
     nblocks: 0
-    Th_universal:
-    Th_learned:
-    Th_single_ch:
     do_CAR: false
     invert_sign: false
     nt: 61

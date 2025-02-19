@@ -514,8 +514,8 @@ def extract_sorting_result(sorting, ii):
     # move results into file folder for storage
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
     Th_this_config = (
-        these_configs[ii]["KS"]["Th_learned"],
         these_configs[ii]["KS"]["Th_universal"],
+        these_configs[ii]["KS"]["Th_learned"],
         tuple(these_configs[ii]["KS"]["Th_single_ch"]),
     )
     params_suffix = (
@@ -716,8 +716,8 @@ if __name__ == "__main__":
                 this_config["Data"]["sorted_folder"] = tmp_sorted_folder
                 # check for keys first
                 if "Th" in iParams[iW]:
-                    this_config["KS"]["Th_learned"] = iParams[iW]["Th"][0]
-                    this_config["KS"]["Th_universal"] = iParams[iW]["Th"][1]
+                    this_config["KS"]["Th_universal"] = iParams[iW]["Th"][0]
+                    this_config["KS"]["Th_learned"] = iParams[iW]["Th"][1]
                 if "spkTh" in iParams[iW]:
                     this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
                 this_config["num_chans"] = preproc_recording.get_num_channels()
