@@ -96,4 +96,4 @@ KS:
 # SpikeInterface parameters
 SI:
     chunk_duration: '20s' # Chunk duration in seconds if float or with units if str (e.g. '1s', '500ms')
-    max_concurrent_tasks: 2 # number of I/O tasks to run in parallel (faster, but too high can produce "Too many open files" error)
+    max_concurrent_tasks: 5 # number of I/O tasks to run in parallel (faster, but too high can produce "Too many open files" error)

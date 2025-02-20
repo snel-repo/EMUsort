@@ -14,8 +14,13 @@ import asyncio
 import os
 import shutil
 import subprocess
+
+# import warnings
+# from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from pathlib import Path
+
+# from pdb import set_trace
 from typing import Union
 
 import numpy as np
@@ -26,6 +31,7 @@ import spikeinterface.sorters as ss
 from probeinterface import Probe
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
+from spikeinterface.core import write_binary_recording
 from spikeinterface.exporters import export_to_phy
 from spikeinterface.postprocessing import compute_spike_amplitudes
 from spikeinterface.qualitymetrics.misc_metrics import (
@@ -534,73 +540,81 @@ def concatenate_emg_data(
 
 def get_emusort_scores(we, ii):
     ### Compute sorting quality metrics, Overall EMUsort score
+    def get_t1_scores(we):
+        ## Check Type I errors (false positives)
+        rp_contamination, rp_violations = compute_refrac_period_violations(
+            we,
+            refractory_period_ms=2.0,
+            censored_period_ms=0.0,
+        )
+        rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
 
-    ## Check Type I errors (false positives)
-    rp_contamination, rp_violations = compute_refrac_period_violations(
-        we,
-        refractory_period_ms=2.0,
-        censored_period_ms=0.0,
-    )
-    rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
+        num_spikes = compute_num_spikes(
+            we,
+        )
+        rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
+            1 + np.fromiter(num_spikes.values(), int)
+        )
+        type_I_scores = rp_violation_fraction_scores * rp_contamination_scores
+        return type_I_scores
 
-    scaled_amps = compute_spike_amplitudes(we, peak_sign="both")[0]
-    num_spikes = compute_num_spikes(
-        we,
-    )
-    rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
-        1 + np.fromiter(num_spikes.values(), int)
-    )
-    type_I_scores = rp_violation_fraction_scores * rp_contamination_scores
+    def get_t2_scores(we):
+        ## Check Type II errors (false negatives)
+        presence_ratios = compute_presence_ratios(
+            we, bin_duration_s=20.0, mean_fr_ratio_thresh=0.5
+        )
+        presence_ratio_scores = np.fromiter(presence_ratios.values(), float)
 
-    ## Check Type II errors (false negatives)
-    presence_ratios = compute_presence_ratios(
-        we, bin_duration_s=20.0, mean_fr_ratio_thresh=0.5
-    )
-    presence_ratio_scores = np.fromiter(presence_ratios.values(), float)
+        amplitude_cutoffs = compute_amplitude_cutoffs(
+            we, peak_sign="both", num_histogram_bins=32, amplitudes_bins_min_ratio=4
+        )
+        amplitude_Gaussianity_scores = 1 - np.fromiter(
+            amplitude_cutoffs.values(), float
+        )
+        denan_amplitude_Gaussianity_scores = np.nan_to_num(
+            amplitude_Gaussianity_scores,
+            nan=0,  # if nan, replace with 0 (bad score due to too few spikes)
+        )
 
-    amplitude_cutoffs = compute_amplitude_cutoffs(
-        we,
-        peak_sign="both",
-        num_histogram_bins=32,
-    )
-    amplitude_Gaussianity_scores = 1 - np.fromiter(amplitude_cutoffs.values(), float)
-    denan_amplitude_Gaussianity_scores = np.nan_to_num(
-        amplitude_Gaussianity_scores, nan=0 # if nan, replace with 0 (bad score due to too few spikes)
-    )
+        type_II_scores = denan_amplitude_Gaussianity_scores * presence_ratio_scores
+        return type_II_scores
 
-    type_II_scores = denan_amplitude_Gaussianity_scores * presence_ratio_scores
+    def get_fr_val_scores(we):
+        ## Check Firing Rates Validity Against Known MU properties (200Hz sigmoid dropoff)
+        firing_rates = compute_firing_rates(
+            we,
+        )
+        firing_rate_viol_scores = 1 / (
+            1 + np.exp((np.fromiter(firing_rates.values(), float) + 1e-8) - 200)
+        )
+        firing_ranges = compute_firing_ranges(we, bin_size_s=0.5)
+        firing_range_viol_scores = 1 / (
+            1 + np.exp((np.fromiter(firing_ranges.values(), float) + 1e-8) - 200)
+        )
+        firing_rate_validity_scores = firing_rate_viol_scores * firing_range_viol_scores
+        return firing_rate_validity_scores
 
-    ## Check Firing Rates Validity Against Known MU properties (200Hz sigmoid dropoff)
-    firing_rates = compute_firing_rates(
-        we,
-    )
-    firing_rate_viol_scores = 1 / (
-        1 + np.exp((np.fromiter(firing_rates.values(), float) + 1e-8) - 200)
-    )
-    firing_ranges = compute_firing_ranges(we, bin_size_s=0.5)
-    firing_range_viol_scores = 1 / (
-        1 + np.exp((np.fromiter(firing_ranges.values(), float) + 1e-8) - 200)
-    )
-    firing_rate_validity_scores = firing_rate_viol_scores * firing_range_viol_scores
-    # gets ratio of largest peak to snippet standard deviation
-    snrs = compute_snrs(
-        we,
-        peak_sign="both",
-    )
-    # gets ratio of largest peak to snippet standard deviation
-    sd_ratios = compute_sd_ratio(
-        we,
-        correct_for_drift=False,
-    )
-    norm_snr_scores = 1 - np.fromiter(sd_ratios.values(), float) / np.fromiter(
-        snrs.values(), float
-    )
-    # clip it 0 to 1 to prevent the plunge to negative infinity when the sd to snr ratio is > 1
-    clipped_norm_snr_scores = np.clip(norm_snr_scores, 0, 1)
+    def get_snr_scores(we):
+        # gets ratio of largest peak to snippet standard deviation
+        snrs = compute_snrs(
+            we,
+            peak_sign="both",
+        )
+        # set sigmoid so that the score is 0.5 at 4
+        snr_scores = 1 - (1 / (1 + np.exp((np.fromiter(snrs.values(), float) - 4))))
+        # clip it 0 to 1 to prevent the plunge to negative infinity when the sd to snr ratio is > 1
+        clipped_snr_scores = np.clip(snr_scores, 0, 1)
+        return clipped_snr_scores
+
+    # get quality metric scores asynchronously
+    clipped_snr_scores = get_snr_scores(we)
+    firing_rate_validity_scores = get_fr_val_scores(we)
+    type_I_scores = get_t1_scores(we)
+    type_II_scores = get_t2_scores(we)
 
     # produce overall score, accounting for all quality metrics
     emusort_scores = (
-        clipped_norm_snr_scores
+        clipped_snr_scores
         * firing_rate_validity_scores
         * type_I_scores
         * type_II_scores
@@ -611,25 +625,71 @@ def get_emusort_scores(we, ii):
     report = (
         "------------------------------------------------------------\n"
         f" Worker {ii} Quality Scores Report:\n"
-        f" Norm SNR scores:\n{norm_snr_scores}\n"
+        f" SNR scores:\n{clipped_snr_scores}\n"
+        f" Firing rate validity:\n{firing_rate_validity_scores}\n"
         f" Type I error scores:\n{type_I_scores}\n"
         f" Type II error scores:\n{type_II_scores}\n"
-        f" Firing rate validity:\n{firing_rate_validity_scores}\n"
         f" EMUsort scores:\n{emusort_scores}\n"
         "------------------------------------------------------------\n"
         f" Worker {ii} Overall EMUsort score: {emusort_score:.3f}\n"
         "------------------------------------------------------------\n"
     )
     return (
-        norm_snr_scores,
+        clipped_snr_scores,
         firing_rate_validity_scores,
         type_I_scores,
         type_II_scores,
         emusort_scores,
         emusort_score,
         report,
-        scaled_amps,
     )
+
+
+def write_rec_and_params(
+    we,
+    sorted_folder,
+    this_sorting,
+    this_config,
+    use_relative_path=True,
+    dtype=None,
+    **job_kwargs
+):
+    # save dat file
+    if dtype is None:
+        if we.has_recording():
+            dtype = we.recording.get_dtype()
+        else:
+            dtype = we.dtype
+
+    if we.has_recording():
+        rec_path = sorted_folder / "recording.dat"
+        write_binary_recording(
+            we.recording, file_paths=rec_path, dtype=dtype, **job_kwargs
+        )
+    else:  # don't save recording.dat
+        print(
+            "Recording will not be copied since waveform extractor is recordingless."
+        )
+        rec_path = "None"
+
+    dtype_str = np.dtype(dtype).name
+
+    # write params.py
+    # if exists delete
+    if (sorted_folder / "params.py").exists():
+        (sorted_folder / "params.py").unlink()
+        # create new
+        Path(sorted_folder / "params.py").touch()
+    with (sorted_folder / "params.py").open("w") as f:
+        if use_relative_path:
+            f.write(f"dat_path = r'recording.dat'\n")
+        else:
+            f.write(f"dat_path = r'{str(rec_path)}'\n")
+        f.write(f"n_channels_dat = {this_config['num_chans']}\n")
+        f.write(f"dtype = '{dtype_str}'\n")
+        f.write(f"offset = 0\n")
+        f.write(f"sample_rate = {this_sorting.get_sampling_frequency()}\n")
+        f.write(f"hp_filtered = {we.is_filtered()}")
 
 
 async def extract_sorting_result(this_sorting, this_config, this_job, ii):
@@ -638,18 +698,18 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     """
     # Save sorting results by exporting to Phy format
     sorted_folder = Path(this_config["Sorting"]["sorted_folder"])
-    waveforms_folder = sorted_folder / "waveforms"
-    phy_folder = sorted_folder / "phy"
+    # waveforms_folder = sorted_folder / "waveforms"
+    # phy_folder = sorted_folder / "phy"
 
     # If these folders already exist, delete the contents
     # if waveforms_folder.exists():
     #     await asyncio.to_thread(shutil.rmtree, waveforms_folder)
     # if phy_folder.exists():
     #     await asyncio.to_thread(shutil.rmtree, phy_folder)
-    if waveforms_folder.exists():
-        shutil.rmtree(waveforms_folder)
-    if phy_folder.exists():
-        shutil.rmtree(phy_folder)
+    # if waveforms_folder.exists():
+    #     shutil.rmtree(waveforms_folder)
+    # if phy_folder.exists():
+    #     shutil.rmtree(phy_folder)
 
     # get nt size from the sorting object, which is the width of the waveforms
     sampling_frequency = this_sorting.get_sampling_frequency()
@@ -696,43 +756,50 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
 
     # Compute quality metrics asynchronously
     (
-        norm_snr_scores,
+        snr_scores,
         firing_rate_validity_scores,
         type_I_scores,
         type_II_scores,
         emusort_scores,
         emusort_score,
         report,
-        scaled_amps,
-    ) = await asyncio.to_thread(
-        get_emusort_scores,
-        we,
-        ii,
-    )
+    ) = get_emusort_scores(we, ii)
+
     # get channel noise levels
     emg_chan_noise_levels = si.get_noise_levels(we.recording, method="mad")
     this_config["emg_chan_noise"] = emg_chan_noise_levels.tolist()
     # add Results section to this_config
     this_config["Results"] = {}
-    this_config["Results"]["norm_snr_scores"] = norm_snr_scores.tolist()
+    this_config["Results"]["snr_scores"] = snr_scores.tolist()
     this_config["Results"][
         "firing_rate_validity_scores"
     ] = firing_rate_validity_scores.tolist()
     this_config["Results"]["type_I_scores"] = type_I_scores.tolist()
     this_config["Results"]["type_II_scores"] = type_II_scores.tolist()
     this_config["Results"]["emusort_scores"] = emusort_scores.tolist()
-    # this_config["Sorting"]["scaled_amps"] = scaled_amps.tolist() # this becomes too large to save
     print(f"Worker {ii} exporting to Phy format...")
 
     # Export to Phy format asynchronously
+    # await asyncio.to_thread(
+    #     export_to_phy,
+    #     we,
+    #     output_folder=phy_folder,
+    #     compute_pc_features=False,
+    #     copy_binary=True,
+    #     use_relative_path=True,
+    #     verbose=False,
+    # )
+    sorter_output = sorted_folder / "sorter_output"
+    movetree(sorter_output, sorted_folder)
+    shutil.rmtree(sorter_output, ignore_errors=True)
+
     await asyncio.to_thread(
-        export_to_phy,
+        write_rec_and_params,
         we,
-        output_folder=phy_folder,
-        compute_pc_features=False,
-        copy_binary=True,
+        sorted_folder,
+        this_sorting,
+        this_config,
         use_relative_path=True,
-        verbose=False,
     )
 
     print(
@@ -740,16 +807,13 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     )
 
     # Move all files and subdirectories from sorter_output and phy_folder into sorted_folder
-    sorter_output = sorted_folder / "sorter_output"
     # await asyncio.to_thread(movetree, sorter_output, sorted_folder)
     # await asyncio.to_thread(movetree, phy_folder, sorted_folder)
     # await asyncio.to_thread(shutil.rmtree, sorter_output, ignore_errors=True)
     # await asyncio.to_thread(shutil.rmtree, phy_folder, ignore_errors=True)
-    movetree(sorter_output, sorted_folder)
     # movetree(phy_folder, sorted_folder)
-    shutil.move(phy_folder / "recording.dat", sorted_folder / "recording.dat")
-    shutil.move(phy_folder / "params.py", sorted_folder / "params.py")
-    shutil.rmtree(sorter_output, ignore_errors=True)
+    # shutil.move(phy_folder / "recording.dat", sorted_folder / "recording.dat")
+    # shutil.move(phy_folder / "params.py", sorted_folder / "params.py")
     # shutil.rmtree(phy_folder, ignore_errors=True)
 
     # Move results into file folder for storage
@@ -785,6 +849,8 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
 
     # append score to the final filename
     final_filename += f"_SCORE_{emusort_score:.3f}"
+    if this_config["sort_type"] == "ks4":
+        final_filename += "_KS4"
     # Rename the folder to preserve the latest sorting results
     # await asyncio.to_thread(shutil.move, this_config["Sorting"]["sorted_folder"], final_filename)
     shutil.move(this_config["Sorting"]["sorted_folder"], final_filename)
@@ -801,6 +867,52 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     return [report, phy_msg]
 
 
+async def extract_concurrently(
+    sortings, job_list, these_configs, max_concurrent_tasks=4
+):
+    print("Extracting sorting results asynchronously...")
+    # Create a task for each worker job
+    tasks = []
+    for ii, sorting in enumerate(sortings):
+        task = extract_sorting_result(sorting, these_configs[ii], job_list[ii], ii)
+        tasks.append(task)
+
+    # Chunk tasks into smaller batches to avoid "too many open files" error
+    msgs = []
+    # loop = asyncio.get_event_loop()
+    # with ProcessPoolExecutor(
+    #     np.ceil(len(tasks) / max_concurrent_tasks).astype(int)
+    # ) as executor:
+    for i in range(0, len(tasks), max_concurrent_tasks):
+        try:
+            # Run the current batch concurrently
+            batch = [
+                asyncio.create_task(task)
+                for task in tasks[i : i + max_concurrent_tasks]
+            ]
+            msgs.append(await asyncio.gather(*batch))
+            # Run the current batch concurrently, submitting to ProcessPoolExecutor
+            # msgs.append(
+            #     loop.run_in_executor(
+            #         executor,
+            #         asyncio.gather,
+            #         *[tasks[j] for j in range(i, i + max_concurrent_tasks)],
+            #     )
+            # )
+        except Exception as e:
+            raise Exception(
+                f"Error in parallel extraction of batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}, try reducing max_concurrent_tasks in 'SI' section of emu_config.yaml next time. ..."
+            ) from e
+        print(
+            "------------------------------------------------------------\n"
+            f"All tasks done for worker batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}. Yay!\n"
+            "------------------------------------------------------------\n"
+        )
+    # Flatten the list of messages
+    msgs = [msg for sublist in msgs for msg in sublist]
+    return msgs
+
+
 def run_KS_sorting(job_list, these_configs):
     """
     Run Kilosort4 spike sorting on the specified recordings and save the results.
@@ -812,37 +924,6 @@ def run_KS_sorting(job_list, these_configs):
     Returns:
     - None
     """
-
-    async def extract_concurrently(sortings, max_concurrent_tasks=4):
-        print("Extracting sorting results asynchronously...")
-        # Create a task for each worker job
-        tasks = []
-        for ii, sorting in enumerate(sortings):
-            task = extract_sorting_result(sorting, these_configs[ii], job_list[ii], ii)
-            tasks.append(task)
-
-        # Chunk tasks into smaller batches to avoid "too many open files" error
-        msgs = []
-        for i in range(0, len(tasks), max_concurrent_tasks):
-            try:
-                # Run the current batch concurrently
-                batch = [
-                    asyncio.create_task(task)
-                    for task in tasks[i : i + max_concurrent_tasks]
-                ]
-                msgs.append(await asyncio.gather(*batch))
-            except Exception as e:
-                raise Exception(
-                    f"Error in parallel extraction of batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}, try reducing max_concurrent_tasks in 'SI' section of emu_config.yaml next time. ..."
-                ) from e
-            print(
-                "------------------------------------------------------------\n"
-                f"All tasks done for worker batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}. Yay!\n"
-                "------------------------------------------------------------\n"
-            )
-        # Flatten the list of messages
-        msgs = [msg for sublist in msgs for msg in sublist]
-        return msgs
 
     ## job_list is of below structure:
     # job_list = [
@@ -861,12 +942,30 @@ def run_KS_sorting(job_list, these_configs):
         return_output=True,
     )
 
+    # Now extract and write the sorting results to each sorted_folder
+    # try:
+    #     # do this in parallel using Pool
+    #     with Pool(these_configs[0]["Sorting"]["num_KS_jobs"]) as pool:
+    #         msgs = pool.starmap(
+    #             extract_sorting_result,
+    #             zip(sortings, these_configs, job_list, range(len(sortings))),
+    #         )
+    # except OSError:
     msgs = asyncio.run(
         extract_concurrently(
             sortings,
+            job_list,
+            these_configs,
             max_concurrent_tasks=these_configs[0]["SI"]["max_concurrent_tasks"],
         )
     )
+    # except Exception as e:
+    #     raise Exception(
+    #         "Error in parallel extraction of sorting results, try reducing num_KS_jobs in 'Sorting' section of emu_config.yaml next time. ..."
+    #     ) from e
+
+    # for ii, sorting in enumerate(sortings):
+    #     extract_sorting_result(sorting, ii)
     return msgs
 
 
@@ -903,9 +1002,14 @@ def main():
     repo_folder_path = Path(__file__).parent.parent.parent
 
     # Generate, reset, or load config file
-    config_file_path = (
-        Path(args.folder).expanduser().resolve().joinpath("emu_config.yaml")
-    )
+    if args.ks4_reset_config:
+        config_file_path = (
+            Path(args.folder).expanduser().resolve().joinpath("ks4_config.yaml")
+        )
+    else:
+        config_file_path = (
+            Path(args.folder).expanduser().resolve().joinpath("emu_config.yaml")
+        )
     # if the config doesn't exist or user wants to reset, load the config template
     if not config_file_path.exists() or args.reset_config or args.ks4_reset_config:
         print(f"Generating config file from default template: \n{config_file_path}\n")
@@ -1020,6 +1124,7 @@ def main():
                 if "spkTh" in iParams[iW]:
                     this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
                 this_config["num_chans"] = preproc_recording.get_num_channels()
+                this_config["sort_type"] = "ks4" if args.ks4_reset_config else "emu"
                 this_config["KS"]["nearest_chans"] = min(
                     this_config["num_chans"], this_config["KS"]["nearest_chans"]
                 )  # do not let nearest_chans exceed the number of channels
@@ -1045,6 +1150,7 @@ def main():
                 for i in range(total_KS_jobs)
             ]
             msgs = run_KS_sorting(job_list, these_configs)
+            # Now extract and write the sorting results to each sorted_folder
             for msg in msgs:
                 print(msg[0])
             for msg in msgs:
