@@ -47,24 +47,31 @@ If you are updating and already previously installed EMUsort, you may encounter 
 
 Before following the below steps, make sure to navigate into the `EMUsort` folder where you cloned the repo.
 
-#### Micromamba (Option 1, recommended for Linux)
+#### Micromamba (Option 1, Recommended)
 
 To install micromamba and set up a micromamba environment, follow these steps:
 
->**Windows:** Command causes issue with PowerShell as "<" operator is reserved. Install and use GitBash shell instead.
+>**Windows:** Install GitBash with default settings and use its shell to use EMUsort.
 
     "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
 
-Make sure to restart terminal (manually, or use `source` to initialize micromamba in the shell), then run:
+If this errors out, you can simply download the script from `micro.mamba.pm/install.sh` and run a file with those contents manually with `bash ./install.sh`.
+Afterwards, make sure to restart terminal, then run:
 
     cd /path/to/repo_folder # go into EMUsort folder
     micromamba env create -f environment.yml
 
->**Windows:** The final dependencies related to `pip` may not install, returning an error.
-If this happened, just activate the new micromamba environment (`micromamba activate emusort`) and run:
->`pip3 install ./sorting/spikeinterface ./sorting/Kilosort4 "git+https://github.com/cortex-lab/phy.git"`
+>**Windows:** During micromamba environment creation, the conda packages usually work, but you may get an error at the end related to the `pip` packages not install installing.
+If this happened, it's likely micromamba worked, but the `pip` packages need manual installation. This is a Windows problem. So, go ahead and activate the micromamba environment you just created (`micromamba activate emusort`), and run the following, one by one:
+>`pip install -e ./src/emusort/spikeinterface` 
+> `pip install -e ./src/emusort/Kilosort4` 
+> `pip install -e .` 
+> `pip install git+https://github.com/cortex-lab/phy.git` 
+> If you encounter errors installing spikeinterface or Kilosort4, try navigating into each submodule folder and running `pip install -e .` to install the packages manually. Then `pip install -e .` in the main folder again to install the main EMUsort package.
 
-#### Conda Environment (Option 2, recommended for Windows)
+If the installs finished, proceed to the Usage section next.
+
+#### Conda Environment (Option 2)
 
 To install miniconda, follow these instructions, making sure to select the option for your OS:
 - https://docs.anaconda.com/miniconda/#quick-command-line-install
