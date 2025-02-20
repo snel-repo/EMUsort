@@ -190,4 +190,4 @@ This will generate a default ks4 config file and run the sort with it. It does n
 
 If there are any discrepancies in the instructions or any problems with the comments/code, please submit an issue on GitHub so we can try to address the issue ASAP.
 
-Thank you for trying out EMUsort! If you find it helpful, enjoy it, or love emus, you can give us a ⭐️ on GitHub!
+Thank you for trying out EMUsort! If you find it helpful, enjoy it, or love emus, give us a ⭐️ on GitHub!
