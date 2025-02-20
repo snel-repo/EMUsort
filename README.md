@@ -147,8 +147,9 @@ To perform multiple operations in sequence, you can append any combination of th
     --config, -c
     --sort, -s
     --reset-config, --r
+    --ks4-reset-config, --k
 
-For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `emusort -f /path/to/session_folder -cs --r`
+For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `emusort -f /path/to/session_folder -cs --r` or simply `emusort -csf .` if you are already in the session folder.
 
 ### Inspecting and Curating with `phy`
 
@@ -178,8 +179,15 @@ If you want to run multiple sort jobs in parallel across a range of KS parameter
 
 Be aware of the combinatorics so you don't generate more sorts than you expected (e.g., NxM combinations for N of param1 and M of param2).
 
+### Running EMUsort as if it is default Kilosort4
+In order to run EMUsort with all Kilosort4 defaults for comparison of performance, you can use `emusort --k -csf .` or the below command:
+
+    emusort --folder /path/to/session_folder --ks4-reset-config --config --sort
+
+This will generate a default ks4 config file and run the sort with it. It does not interfere with the main `emu_config.yaml` file because it is a separate config file named `ks4_config.yaml`. This is useful for comparing the performance of EMUsort vs. Kilosort4.
+
 ## Final Notes
 
 If there are any discrepancies in the instructions or any problems with the comments/code, please submit an issue on GitHub so we can try to address the issue ASAP.
 
-Thanks for trying out `EMUsort`!
+Thank you for trying out EMUsort! If you find it helpful, enjoy it, or love emus, you can give us a ⭐️ on GitHub!
