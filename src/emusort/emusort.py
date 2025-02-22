@@ -667,9 +667,7 @@ def write_rec_and_params(
             we.recording, file_paths=rec_path, dtype=dtype, **job_kwargs
         )
     else:  # don't save recording.dat
-        print(
-            "Recording will not be copied since waveform extractor is recordingless."
-        )
+        print("Recording will not be copied since waveform extractor is recordingless.")
         rec_path = "None"
 
     dtype_str = np.dtype(dtype).name
@@ -737,14 +735,13 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
 
         print("Error extracting waveforms:", e)
 
-        remove_excess_spikes_recording = scur.remove_excess_spikes(
+        remove_excess_spikes_sorting = scur.remove_excess_spikes(
             this_sorting, this_job["recording"]
         )
-
         we = await asyncio.to_thread(
             si.extract_waveforms,
-            remove_excess_spikes_recording,
-            this_sorting,
+            this_job["recording"],
+            remove_excess_spikes_sorting,
             # waveforms_folder,
             mode="memory",
             ms_before=ms_buffer,
@@ -1149,8 +1146,10 @@ def main():
                 }
                 for i in range(total_KS_jobs)
             ]
+            print("Starting sorting jobs...")
             msgs = run_KS_sorting(job_list, these_configs)
-            # Now extract and write the sorting results to each sorted_folder
+
+            # Now print the results in order
             for msg in msgs:
                 print(msg[0])
             for msg in msgs:
