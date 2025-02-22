@@ -156,7 +156,7 @@ To perform multiple operations in sequence, you can append any combination of th
     --reset-config, --r
     --ks4-reset-config, --k
 
-For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `emusort -f /path/to/session_folder -cs --r` or simply `emusort -csf .` if you are already in the session folder.
+For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `emusort -f /path/to/session_folder -cs --r` or simply `emusort --r -csf .` if you are already in the session folder. The flags can be in any order, but the path must always follow directly after the `-f` flag.
 
 ### Inspecting and Curating with `phy`
 
