@@ -763,7 +763,16 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     ) = get_emusort_scores(we, ii)
 
     # get channel noise levels
-    emg_chan_noise_levels = si.get_noise_levels(we.recording, method="mad")
+    try:
+        emg_chan_noise_levels = si.get_noise_levels(
+            we.recording, return_scaled=True, method="mad"
+        )
+    # handle the error for recording types without scaling information (such as binary recordings)
+    except ValueError:
+        emg_chan_noise_levels = si.get_noise_levels(
+            we.recording, return_scaled=False, method="mad"
+        )
+
     this_config["emg_chan_noise"] = emg_chan_noise_levels.tolist()
     # add Results section to this_config
     this_config["Results"] = {}
