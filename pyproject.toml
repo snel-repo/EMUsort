@@ -1,13 +1,8 @@
-[build-system]
-requires = ["setuptools>=42", "wheel", "setuptools_scm"]
-
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "emusort"
 dynamic = ["version"]
 description = "A command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography"
-requires-python = ">=3.5" # Specify the minimum Python version
+requires-python = ">=3.8" # updating python version based on spikeinterface requirements 
 authors = [
     { name = "Sean O'Connell", email = "smarkoco@proton.me" },
     { name = "Jonathan A Michaels", email = "jmichae@yorku.ca" },
@@ -15,8 +10,81 @@ authors = [
 license = { file = "LICENSE" }
 readme = "README.md"
 
+dependencies = [
+    "matplotlib",
+    "pandas",
+    "pendulum",
+    "pynvml",
+    "spython",
+    "typing-extensions",
+    "kilosort", 
+    "spikeinterface"
+]
+
+
 [project.urls]
 Homepage = "https://github.com/snel-repo/EMUsort"
 
 [project.scripts]
 emusort = "emusort.emusort:main" # Entry point for your command-line tool
+
+[build-system]
+requires = ["setuptools>=42", "wheel", "setuptools_scm"]
+
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+    "ruff>=0.9.5",
+]
+
+[project.optional-dependencies]
+
+cpu = [
+    "torch>=2.4.0",
+    "torchaudio>=2.4.0",
+]
+cu118 = [
+    "torch>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
+    "torchaudio>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
+    "torch>=2.4.0; sys_platform == 'darwin'",
+    "torchaudio>=2.4.0; sys_platform == 'darwin'",
+]
+
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "cu118" },
+    ],
+]
+
+[tool.uv.sources]
+kilosort = [
+    { git = "https://github.com/snel-repo/Kilosort4.git" } # kilosort4 snel-repo 
+]
+spikeinterface = [
+    {git = "https://github.com/snel-repo/spikeinterface.git"} # spikeinterface snel-repo 
+]
+# CPU version
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu118", extra = "cu118", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
+]
+torchaudio = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu118", extra = "cu118", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
