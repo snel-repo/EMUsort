@@ -424,11 +424,15 @@ def preprocess_ephys_data(
     else:
         print("Bad channels being removed:\n" + str(bad_channel_ids))
         recording_filtered = recording_filtered.channel_slice(
-            np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids)
+            # the below line resulted in an unintended reordering of channels, replaced with list comp
+            # np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids)
+            [
+                ch
+                for ch in recording_filtered.get_channel_ids()
+                if ch not in bad_channel_ids
+            ]
         )
-        # recording_filtered = recording_filtered.remove_channels(bad_channel_ids)
-    # # Apply common reference to the EMG data
-    # recording_filtered = spre.common_reference(recording_filtered)
+
     # Apply notch filter to the EMG data
     recording_notch = spre.notch_filter(
         recording_filtered, freq=60, q=30
@@ -542,20 +546,20 @@ def get_emusort_scores(we, ii):
     ### Compute sorting quality metrics, Overall EMUsort score
     def get_t1_scores(we):
         ## Check Type I errors (false positives)
-        rp_contamination, rp_violations = compute_refrac_period_violations(
+        rp_contamination, _ = compute_refrac_period_violations(
             we,
-            refractory_period_ms=2.0,
-            censored_period_ms=0.0,
+            refractory_period_ms=1,
+            censored_period_ms=0,
         )
         rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
 
-        num_spikes = compute_num_spikes(
-            we,
-        )
-        rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
-            1 + np.fromiter(num_spikes.values(), int)
-        )
-        type_I_scores = rp_violation_fraction_scores * rp_contamination_scores
+        # num_spikes = compute_num_spikes(
+        #     we,
+        # )
+        # rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
+        # 1 + np.fromiter(num_spikes.values(), int)
+        # )
+        type_I_scores = rp_contamination_scores  # rp_violation_fraction_scores
         return type_I_scores
 
     def get_t2_scores(we):
@@ -1129,6 +1133,10 @@ def main():
                     this_config["KS"]["Th_learned"] = iParams[iW]["Th"][1]
                 if "spkTh" in iParams[iW]:
                     this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
+                if "n_templates" in iParams[iW]:
+                    this_config["KS"]["n_templates"] = iParams[iW]["n_templates"]
+                if "n_pcs" in iParams[iW]:
+                    this_config["KS"]["n_pcs"] = iParams[iW]["n_pcs"]
                 this_config["num_chans"] = preproc_recording.get_num_channels()
                 this_config["sort_type"] = "ks4" if args.ks4_reset_config else "emu"
                 this_config["KS"]["nearest_chans"] = min(
