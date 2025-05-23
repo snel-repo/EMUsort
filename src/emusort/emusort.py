@@ -12,15 +12,12 @@ start_time = datetime.now()  # include imports in time cost
 import argparse
 import asyncio
 import os
+import platform
+import resource
 import shutil
 import subprocess
-
-# import warnings
-# from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from pathlib import Path
-
-# from pdb import set_trace
 from typing import Union
 
 import numpy as np
@@ -32,16 +29,12 @@ from probeinterface import Probe
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 from spikeinterface.core import write_binary_recording
-from spikeinterface.exporters import export_to_phy
-from spikeinterface.postprocessing import compute_spike_amplitudes
 from spikeinterface.qualitymetrics.misc_metrics import (
     compute_amplitude_cutoffs,
     compute_firing_ranges,
     compute_firing_rates,
-    compute_num_spikes,
     compute_presence_ratios,
     compute_refrac_period_violations,
-    compute_sd_ratio,
     compute_snrs,
 )
 from torch.cuda import is_available
@@ -878,7 +871,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
 
 
 async def extract_concurrently(
-    sortings, job_list, these_configs, max_concurrent_tasks=4
+    sortings, job_list, these_configs, max_concurrent_tasks=5
 ):
     print("Extracting sorting results asynchronously...")
     # Create a task for each worker job
@@ -1163,6 +1156,41 @@ def main():
                 }
                 for i in range(total_KS_jobs)
             ]
+
+            # update the max resource limits to fix the "Too many open files" error during
+            # asynchronous writes at the end of sorting. This change allows higher values
+            # to be set for the max_concurrent_tasks value in the emu_config.yaml file
+            if platform.system() in ("Linux",):
+                try:
+                    # Based on SI implementation, we need 1 permitted open file per cluster, per sort
+                    # 1000 should be well above the upper limit of clusters identified in each sort
+                    overestimated_num_resources_needed = int(
+                        round(1000 * this_config["SI"]["max_concurrent_tasks"])
+                    )
+                    original_resource_limits = resource.getrlimit(
+                        resource.RLIMIT_NOFILE
+                    )
+                    if original_resource_limits[0] < overestimated_num_resources_needed:
+                        resource.setrlimit(
+                            resource.RLIMIT_NOFILE,
+                            (
+                                overestimated_num_resources_needed,
+                                overestimated_num_resources_needed,
+                            ),
+                        )
+                        updated_resource_limits = resource.getrlimit(
+                            resource.RLIMIT_NOFILE
+                        )
+                        print(
+                            f"Updated resource limit from {original_resource_limits[0]} to {updated_resource_limits[0]}"
+                        )
+                except Exception as e:
+                    print(f"Could not set the new resource limits because:\n{e}")
+                    print(
+                        "You may need lower max_concurrent_tasks in emu_config.yaml,"
+                        " if 'Too many open files' error occurs during saving of results"
+                    )
+
             print("Starting sorting jobs...")
             msgs = run_KS_sorting(job_list, these_configs)
 
