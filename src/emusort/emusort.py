@@ -13,7 +13,6 @@ import argparse
 import asyncio
 import os
 import platform
-import resource
 import shutil
 import subprocess
 from copy import deepcopy
@@ -1157,39 +1156,40 @@ def main():
                 for i in range(total_KS_jobs)
             ]
 
-            # update the max resource limits to fix the "Too many open files" error during
-            # asynchronous writes at the end of sorting. This change allows higher values
-            # to be set for the max_concurrent_tasks value in the emu_config.yaml file
-            if platform.system() in ("Linux",):
-                try:
-                    # Based on SI implementation, we need 1 permitted open file per cluster, per sort
-                    # 1000 should be well above the upper limit of clusters identified in each sort
-                    overestimated_num_resources_needed = int(
-                        round(1000 * this_config["SI"]["max_concurrent_tasks"])
+        # update the max resource limits to fix the "Too many open files" error during
+        # asynchronous writes at the end of sorting. This change allows higher values
+        # to be set for the max_concurrent_tasks value in the emu_config.yaml file
+        if platform.system() in ("Linux","Darwin"):
+            try:
+                import resource
+                # Based on SI implementation, we need 1 permitted open file per cluster, per sort
+                # 1000 should be well above the upper limit of clusters identified in each sort
+                overestimated_num_resources_needed = int(
+                    round(1000 * this_config["SI"]["max_concurrent_tasks"])
+                )
+                original_resource_limits = resource.getrlimit(
+                    resource.RLIMIT_NOFILE
+                )
+                if original_resource_limits[0] < overestimated_num_resources_needed:
+                    resource.setrlimit(
+                        resource.RLIMIT_NOFILE,
+                        (
+                            overestimated_num_resources_needed,
+                            overestimated_num_resources_needed,
+                        ),
                     )
-                    original_resource_limits = resource.getrlimit(
+                    updated_resource_limits = resource.getrlimit(
                         resource.RLIMIT_NOFILE
                     )
-                    if original_resource_limits[0] < overestimated_num_resources_needed:
-                        resource.setrlimit(
-                            resource.RLIMIT_NOFILE,
-                            (
-                                overestimated_num_resources_needed,
-                                overestimated_num_resources_needed,
-                            ),
-                        )
-                        updated_resource_limits = resource.getrlimit(
-                            resource.RLIMIT_NOFILE
-                        )
-                        print(
-                            f"Updated resource limit from {original_resource_limits[0]} to {updated_resource_limits[0]}"
-                        )
-                except Exception as e:
-                    print(f"Could not set the new resource limits because:\n{e}")
                     print(
-                        "You may need lower max_concurrent_tasks in emu_config.yaml,"
-                        " if 'Too many open files' error occurs during saving of results"
+                        f"Updated resource limit from {original_resource_limits[0]} to {updated_resource_limits[0]}"
                     )
+            except Exception as e:
+                print(f"Could not set the new resource limits because:\n{e}")
+                print(
+                    "You may need lower max_concurrent_tasks in emu_config.yaml,"
+                    " if 'Too many open files' error occurs during saving of results"
+                )
 
             print("Starting sorting jobs...")
             msgs = run_KS_sorting(job_list, these_configs)
