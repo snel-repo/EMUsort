@@ -12,15 +12,11 @@ start_time = datetime.now()  # include imports in time cost
 import argparse
 import asyncio
 import os
+import platform
 import shutil
 import subprocess
-
-# import warnings
-# from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from pathlib import Path
-
-# from pdb import set_trace
 from typing import Union
 
 import numpy as np
@@ -32,16 +28,12 @@ from probeinterface import Probe
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 from spikeinterface.core import write_binary_recording
-from spikeinterface.exporters import export_to_phy
-from spikeinterface.postprocessing import compute_spike_amplitudes
 from spikeinterface.qualitymetrics.misc_metrics import (
     compute_amplitude_cutoffs,
     compute_firing_ranges,
     compute_firing_rates,
-    compute_num_spikes,
     compute_presence_ratios,
     compute_refrac_period_violations,
-    compute_sd_ratio,
     compute_snrs,
 )
 from torch.cuda import is_available
@@ -424,11 +416,15 @@ def preprocess_ephys_data(
     else:
         print("Bad channels being removed:\n" + str(bad_channel_ids))
         recording_filtered = recording_filtered.channel_slice(
-            np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids)
+            # the below line resulted in an unintended reordering of channels, replaced with list comp
+            # np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids)
+            [
+                ch
+                for ch in recording_filtered.get_channel_ids()
+                if ch not in bad_channel_ids
+            ]
         )
-        # recording_filtered = recording_filtered.remove_channels(bad_channel_ids)
-    # # Apply common reference to the EMG data
-    # recording_filtered = spre.common_reference(recording_filtered)
+
     # Apply notch filter to the EMG data
     recording_notch = spre.notch_filter(
         recording_filtered, freq=60, q=30
@@ -542,20 +538,20 @@ def get_emusort_scores(we, ii):
     ### Compute sorting quality metrics, Overall EMUsort score
     def get_t1_scores(we):
         ## Check Type I errors (false positives)
-        rp_contamination, rp_violations = compute_refrac_period_violations(
+        rp_contamination, _ = compute_refrac_period_violations(
             we,
-            refractory_period_ms=2.0,
-            censored_period_ms=0.0,
+            refractory_period_ms=1,
+            censored_period_ms=0,
         )
         rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
 
-        num_spikes = compute_num_spikes(
-            we,
-        )
-        rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
-            1 + np.fromiter(num_spikes.values(), int)
-        )
-        type_I_scores = rp_violation_fraction_scores * rp_contamination_scores
+        # num_spikes = compute_num_spikes(
+        #     we,
+        # )
+        # rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
+        # 1 + np.fromiter(num_spikes.values(), int)
+        # )
+        type_I_scores = rp_contamination_scores  # rp_violation_fraction_scores
         return type_I_scores
 
     def get_t2_scores(we):
@@ -874,7 +870,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
 
 
 async def extract_concurrently(
-    sortings, job_list, these_configs, max_concurrent_tasks=4
+    sortings, job_list, these_configs, max_concurrent_tasks=5
 ):
     print("Extracting sorting results asynchronously...")
     # Create a task for each worker job
@@ -1129,6 +1125,10 @@ def main():
                     this_config["KS"]["Th_learned"] = iParams[iW]["Th"][1]
                 if "spkTh" in iParams[iW]:
                     this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
+                if "n_templates" in iParams[iW]:
+                    this_config["KS"]["n_templates"] = iParams[iW]["n_templates"]
+                if "n_pcs" in iParams[iW]:
+                    this_config["KS"]["n_pcs"] = iParams[iW]["n_pcs"]
                 this_config["num_chans"] = preproc_recording.get_num_channels()
                 this_config["sort_type"] = "ks4" if args.ks4_reset_config else "emu"
                 this_config["KS"]["nearest_chans"] = min(
@@ -1155,14 +1155,50 @@ def main():
                 }
                 for i in range(total_KS_jobs)
             ]
-            print("Starting sorting jobs...")
-            msgs = run_KS_sorting(job_list, these_configs)
 
-            # Now print the results in order
-            for msg in msgs:
-                print(msg[0])
-            for msg in msgs:
-                print(msg[1])
+        # update the max resource limits to fix the "Too many open files" error during
+        # asynchronous writes at the end of sorting. This change allows higher values
+        # to be set for the max_concurrent_tasks value in the emu_config.yaml file
+        if platform.system() in ("Linux","Darwin"):
+            try:
+                import resource
+                # Based on SI implementation, we need 1 permitted open file per cluster, per sort
+                # 1000 should be well above the upper limit of clusters identified in each sort
+                overestimated_num_resources_needed = int(
+                    round(1000 * this_config["SI"]["max_concurrent_tasks"])
+                )
+                original_resource_limits = resource.getrlimit(
+                    resource.RLIMIT_NOFILE
+                )
+                if original_resource_limits[0] < overestimated_num_resources_needed:
+                    resource.setrlimit(
+                        resource.RLIMIT_NOFILE,
+                        (
+                            overestimated_num_resources_needed,
+                            overestimated_num_resources_needed,
+                        ),
+                    )
+                    updated_resource_limits = resource.getrlimit(
+                        resource.RLIMIT_NOFILE
+                    )
+                    print(
+                        f"Updated resource limit from {original_resource_limits[0]} to {updated_resource_limits[0]}"
+                    )
+            except Exception as e:
+                print(f"Could not set the new resource limits because:\n{e}")
+                print(
+                    "You may need lower max_concurrent_tasks in emu_config.yaml,"
+                    " if 'Too many open files' error occurs during saving of results"
+                )
+
+        print("Starting sorting jobs...")
+        msgs = run_KS_sorting(job_list, these_configs)
+
+        # Now print the results in order
+        for msg in msgs:
+            print(msg[0])
+        for msg in msgs:
+            print(msg[1])
 
     # Print status and time elapsed
     print("Pipeline finished! You've earned a break.")
