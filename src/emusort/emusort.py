@@ -1191,14 +1191,14 @@ def main():
                     " if 'Too many open files' error occurs during saving of results"
                 )
 
-            print("Starting sorting jobs...")
-            msgs = run_KS_sorting(job_list, these_configs)
+        print("Starting sorting jobs...")
+        msgs = run_KS_sorting(job_list, these_configs)
 
-            # Now print the results in order
-            for msg in msgs:
-                print(msg[0])
-            for msg in msgs:
-                print(msg[1])
+        # Now print the results in order
+        for msg in msgs:
+            print(msg[0])
+        for msg in msgs:
+            print(msg[1])
 
     # Print status and time elapsed
     print("Pipeline finished! You've earned a break.")
