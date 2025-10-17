@@ -2,7 +2,7 @@
 name = "emusort"
 dynamic = ["version"]
 description = "A command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography"
-requires-python = ">=3.8,<=3.11" # updating python version based on spikeinterface requirements. Phy GUI requires less than 3.11
+requires-python = ">=3.8,<=3.10" # python version constrained by spikeinterface and Phy GUI requirements. Windows Phy seems to not work with Python >= 3.10
 authors = [
     { name = "Sean O'Connell", email = "smarkoco@proton.me" },
     { name = "Jonathan A Michaels", email = "jmichae@yorku.ca" },
