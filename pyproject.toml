@@ -2,7 +2,7 @@
 name = "emusort"
 dynamic = ["version"]
 description = "A command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography"
-requires-python = ">=3.8,<3.11" # updating python version based on spikeinterface requirements. Phy GUI requires less than 3.11
+requires-python = ">=3.8,<=3.11" # updating python version based on spikeinterface requirements. Phy GUI requires less than 3.11
 authors = [
     { name = "Sean O'Connell", email = "smarkoco@proton.me" },
     { name = "Jonathan A Michaels", email = "jmichae@yorku.ca" },
@@ -18,6 +18,10 @@ dependencies = [
     "spython",
     "typing-extensions",
     "ruamel.yaml",
+    "pyqt5",
+    "pyqtgraph",
+    "pyqt5-sip",
+    "pyqtwebengine",
     "phy",
     "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
     "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
@@ -65,9 +69,14 @@ conflicts = [
     ],
 ]
 constraint-dependencies = [
-    "pyqt5-qt5 < 5.15.2", #; sys_platform == 'win32'"
-    "pyqtwebengine < 5.15.2",
+    "pyqt5 >= 5.15.9; sys_platform == 'linux'",
+    "pyqt5-sip >= 12.12.2; sys_platform == 'linux'",
+    "qtpy >= 2.4.1; sys_platform == 'linux'",
+    "pyqtwebengine > 5.15.2; sys_platform == 'linux'",
+    "pyqt5-qt5 < 5.15.2; sys_platform == 'win32'",
+    "pyqtwebengine < 5.15.2; sys_platform == 'win32'",
     "numcodecs < 0.16.0",
+    "joblib<1.5.0",
 ]
 
 [tool.uv.sources]
