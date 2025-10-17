@@ -1,15 +1,15 @@
-<img width="1024px" style="max-width: 50%" alt="stylized, electrified emu before an array of white neural waveforms" src="images/emu_voltage2.png"/>
+<img width="1024px" style="max-width: 50%" alt="stylized, electrified emu before an array of white waveforms" src="images/emu_voltage2.png"/>
 
 # Enhanced Motor Unit sorter (EMUsort)
 
-### command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography
+### A command line tool for high performance spike sorting of multichannel, single unit electromyography
 
-- Perform spike sorting with a modified version of Kilosort4 for 5-10% accuracy boost (see paper)
-- Use a central configuration file to control all parameters
+- Perform spike sorting with a modified version of Kilosort4 specifically tailored to MUAP data for improved performance (see paper for performance comparison results)
+- Use a central configuration file to control all parameters and perform parameter sweeps
 - Capable of automatically handling Intan, OpenEphys, NWB, Blackrock, and Binary datasets
-  - Combine recordings into single object for unified processing
-  - Remove broken or noisy channels automatically
-  - Export results and easily view in Phy
+- Combine recordings into single object for unified processing
+- Remove broken or noisy channels automatically
+- Export results and easily view in Phy
 
 ## Installation
 
@@ -20,7 +20,7 @@
 - Nvidia Driver:
   - Linux: >=450.80.02
   - Windows: >=452.39
-- CUDA Toolkit (Automatically installed with micromamba/conda environment):
+- CUDA Toolkit (Automatically installed with the environment):
   - \>=11.3
 
 ### Cloning from GitHub
@@ -31,7 +31,7 @@ Clone the repository recursively onto your machine (for example, in the home dir
 
 - If you accidentally ran `git clone` without `--recurse-submodules`, just delete the entire `EMUsort` folder and rerun the above command
 
-After cloning is complete, you will need to configure a micromamba or conda environment.
+After cloning is complete, you will need to configure a uv, micromamba, or conda environment.
 
 ### Pulling Updates from GitHub
 
@@ -47,58 +47,83 @@ If you are updating and already previously installed EMUsort, you may encounter 
 
 Before following the below steps, make sure to navigate into the `EMUsort` folder where you cloned the repo.
 
-#### Micromamba (Option 1, Recommended)
+#### uv (Option 1, Recommended)
 
-To install micromamba and set up a micromamba environment, follow these steps:
+Follow the steps and execute the commands below to install and manage EMUsort with [uv](https://docs.astral.sh/uv/), a high performance Python package and project manager:
 
->**Windows:** Install GitBash with default settings and use its shell to use EMUsort.
+> **Windows:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
+
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+
+Then either restart the terminal or execute the command suggested in the terminal to enable using `uv` in the terminal. Next, create the environment and install all dependendencies with `uv`:
+
+    cd /path/to/repo_folder # go into EMUsort clone folder
+    uv sync --extra cu118
+
+If the install finished successfully, proceed to the Usage section next.
+
+#### Micromamba (Option 2, No Longer Recommended)
+
+To install micromamba and set up a micromamba environment, follow the steps and execute the commands below:
+
+> **Windows:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
 
     "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
 
 If this errors out, you can simply download the script from `micro.mamba.pm/install.sh` and run a file with those contents manually with `bash ./install.sh`.
-Afterwards, make sure to restart terminal, then run:
+Afterwards, make sure to restart terminal, and use the old version of pyproject.toml stored as pyproject.toml.bak by renaming it back to pyproject.toml:
 
-    cd /path/to/repo_folder # go into EMUsort folder
+    cd /path/to/repo_folder # go into EMUsort clone folder
     micromamba env create -f environment.yml
 
->**Windows:** During micromamba environment creation, the conda packages usually work, but you may get an error at the end related to the `pip` packages not install installing.
-If this happened, it's likely micromamba worked, but the `pip` packages need manual installation. This is a Windows problem. So, go ahead and activate the micromamba environment you just created (`micromamba activate emusort`), and run the following, one by one:
->`pip install -e ./src/emusort/spikeinterface` 
-> `pip install -e ./src/emusort/Kilosort4` 
-> `pip install -e .` 
-> `pip install git+https://github.com/cortex-lab/phy.git` 
+> **Windows:** During micromamba environment creation, the conda packages usually work, but you may get an error at the end related to the `pip` packages not install installing.
+> If this happened, it's likely micromamba worked, but the `pip` packages need manual installation. This is a Windows problem. So, go ahead and activate the micromamba environment you just created (`micromamba activate emusort`), and run the following, one by one:
+> `pip install -e ./src/emusort/spikeinterface`
+> `pip install -e ./src/emusort/Kilosort4`
+> `pip install -e .`
+> `pip install git+https://github.com/cortex-lab/phy.git`
 > If you encounter errors installing spikeinterface or Kilosort4, try navigating into each submodule folder and running `pip install -e .` to install the packages manually. Then `pip install -e .` in the main folder again to install the main EMUsort package.
 
-If the installs finished, proceed to the Usage section next.
+If the install finished successfully, proceed to the Usage section next.
 
-#### Conda Environment (Option 2)
+#### Conda Environment (Option 3, Not Recommended)
 
 To install miniconda, follow these instructions, making sure to select the option for your OS:
+
 - https://docs.anaconda.com/miniconda/#quick-command-line-install
 
->**Windows:** Open Anaconda Prompt from the Start Menu, and proceed with the below commands
+> **Windows:** Open Anaconda Prompt from the Start Menu, and proceed with the below commands
 
 Run the below commands in the conda-initialized terminal:
-    
-    cd /path/to/repo_folder # go into EMUsort folder
+
+    cd /path/to/repo_folder # go into EMUsort clone folder
     conda env create -f environment.yml
 
 ## Usage
 
 ### Python Environment Activation
 
-Every time you open a new terminal, you must activate the environment.
-If micromamba was used, activate the environment using
+Every time you open a new terminal, you must activate the environment, whether manually or automatically (see Advanced Usage for automatic activation).
+
+If `uv` was used, activate the environment using:
+
+**Windows:** `source /path/to/repo_folder/.venv/Scripts/activate` 
+
+**Linux/Mac:** `source /path/to/repo_folder/.venv/bin/activate` # activation script is in EMUsort clone folder
+
+
+If `micromamba` was used, activate the environment using:
 
     micromamba activate emusort
 
-If a conda environment was used, activate it using
+If a conda environment was used, activate it using:
 
     conda activate emusort
 
 ### Session Folder Structure
 
 EMUsort relies on a main "session folder", which contains the below 4 items.
+
 - For Intan, NWB, Blackrock, or Binary datasets, all you need to do is create a new session folder to contain your desired dataset files (Item #1 below). Note that nested folders are fine but use the leaf folder.
 - For Open Ephys, the session folder itself (dated folder containing 'Record Node ###') will act as the session folder. The original dataset files will not be modified.
 
@@ -118,6 +143,7 @@ Items #2-4, will be generated automatically inside the provided session folder.
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
 
 ### Example Folder Tree
+
 #### Intan, NWB, Blackrock, and Binary datasets:
 
 ![Alt text](images/folder_tree_structure.png)
@@ -164,21 +190,25 @@ To view and analyze the latest sort with Phy GUI, navigate into the `sorted_###`
 
     phy template-gui params.py
 
-For more information on `phy`, see documentation at the main repo: [https://phy.readthedocs.io/en/latest/](<[url](https://phy.readthedocs.io/en/latest/)>)
+For more information on `phy`, see documentation at the main repo: [https://phy.readthedocs.io/en/latest/]([url](https://phy.readthedocs.io/en/latest/))
 
 ## Advanced Usage
 
 ### Automatically Activate the Environment
 
-To automatically activate the environment each time you open a new terminal, append to the end of your `~/.bashrc` file the activation command, like below:
+To automatically activate the environment each time you open a new terminal, append to the end of your `~/.bashrc` file the activation command, depending on which environment manager you are using, execute:
 
-    echo "micromamba activate emusort" >> ~/.bashrc
+>**Windows**: If using GitBash (recommended), you may need to replace `~/.bashrc` with `~/.bash_profile` in the below commands
+
+    `uv`: echo "source /path/to/repo_folder/.venv/bin/activate" >> ~/.bashrc
 
 or
 
-    echo "conda activate emusort" >> ~/.bashrc
+    `micromamba`: echo "micromamba activate emusort" >> ~/.bashrc
 
-depending on which environment manager you are using
+or
+
+    `conda`: echo "conda activate emusort" >> ~/.bashrc
 
 ### Grid Search Over Multiple Kilosort Parameters to Produce Many Sorts in Parallel
 
@@ -187,6 +217,7 @@ If you want to run multiple sort jobs in parallel across a range of KS parameter
 Be aware of the combinatorics so you don't generate more sorts than you expected (e.g., NxM combinations for N of param1 and M of param2).
 
 ### Running EMUsort As If Default Kilosort4 (v4.0.11)
+
 In order to run EMUsort exactly like a default Kilosort4 (v4.0.11) installation for comparison of performance, you can use `emusort --k -csf .` or the below command:
 
     emusort --folder /path/to/session_folder --ks4-reset-config --config --sort

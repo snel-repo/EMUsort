@@ -2,7 +2,7 @@
 name = "emusort"
 dynamic = ["version"]
 description = "A command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography"
-requires-python = ">=3.8" # updating python version based on spikeinterface requirements 
+requires-python = ">=3.8,<3.11" # updating python version based on spikeinterface requirements. Phy GUI requires less than 3.11
 authors = [
     { name = "Sean O'Connell", email = "smarkoco@proton.me" },
     { name = "Jonathan A Michaels", email = "jmichae@yorku.ca" },
@@ -17,8 +17,12 @@ dependencies = [
     "pynvml",
     "spython",
     "typing-extensions",
-    "kilosort", 
-    "spikeinterface"
+    "ruamel.yaml",
+    "phy",
+    "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
+    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
+    # "kilosort", 
+    # "spikeinterface",
 ]
 
 
@@ -60,14 +64,23 @@ conflicts = [
         { extra = "cu118" },
     ],
 ]
+constraint-dependencies = [
+    "pyqt5-qt5 < 5.15.2", #; sys_platform == 'win32'"
+    "pyqtwebengine < 5.15.2",
+    "numcodecs < 0.16.0",
+]
 
 [tool.uv.sources]
-kilosort = [
-    { git = "https://github.com/snel-repo/Kilosort4.git" } # kilosort4 snel-repo 
+# kilosort = [
+#     { git = "https://github.com/snel-repo/Kilosort4.git" } # kilosort4 snel-repo 
+# ]
+# spikeinterface = [
+#     {git = "https://github.com/snel-repo/spikeinterface.git"} # spikeinterface snel-repo 
+# ]
+phy = [
+    {git = "https://github.com/cortex-lab/phy.git", rev = "7a2494b"} # Phy GUI 
 ]
-spikeinterface = [
-    {git = "https://github.com/snel-repo/spikeinterface.git"} # spikeinterface snel-repo 
-]
+
 # CPU version
 torch = [
     { index = "pytorch-cpu", extra = "cpu" },
@@ -87,4 +100,3 @@ explicit = true
 name = "pytorch-cu118"
 url = "https://download.pytorch.org/whl/cu118"
 explicit = true
-

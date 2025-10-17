@@ -1,8 +1,8 @@
 import sys
 
-if sys.version_info < (3, 5):
+if sys.version_info < (3, 8):
     sys.exit(
-        "Error: Your Python version is not supported. Please use Python 3.5 or later."
+        "Error: Your Python version is not supported. Please use Python 3.8 or later."
     )
 
 from datetime import datetime
@@ -142,7 +142,7 @@ def dicts_match(dict1, dict2):
 
 def path_to_str_recursive(data):
     if isinstance(data, Path):
-        return str(data)
+        return data.as_posix()
     elif isinstance(data, dict):
         return {key: path_to_str_recursive(value) for key, value in data.items()}
     elif isinstance(data, list):
@@ -834,7 +834,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
             f"Th_{Th_this_config[0]},{Th_this_config[1]}_spkTh_{Th_this_config[2]})"
         )
     # add timestamp to the final filename
-    final_filename = f'{str(sorted_folder).split("_wkr")[0]}_{params_suffix}'
+    final_filename = f'{sorted_folder.as_posix().split("_wkr")[0]}_{params_suffix}'
     final_filename = final_filename.replace("sorted_", f"sorted_{time_stamp_us}_")
     # remove _g0 if there is only one group
     if len(this_config["Group"]["emg_chan_list"]) == 1:
@@ -864,7 +864,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
         this_config["emg_chans_used"],
     )
     # make the phy command string
-    phy_msg = f"\nTo view Worker {ii} result in Phy, run:\nphy template-gui {str(Path(final_filename).joinpath('params.py'))}\n"
+    phy_msg = f"\nTo view Worker {ii} result in Phy, run:\nphy template-gui {Path(final_filename).joinpath('params.py').as_posix()}\n"
     # return 2 strings to print to console later
     return [report, phy_msg]
 
@@ -1110,7 +1110,7 @@ def main():
                 # create new folder for each parallel job
                 zfill_amount = len(str(full_config["Sorting"]["num_KS_jobs"]))
                 tmp_sorted_folder = (
-                    str(this_group_sorted_folder) + "_wkr" + str(iW).zfill(zfill_amount)
+                    this_group_sorted_folder.as_posix() + "_wkr" + str(iW).zfill(zfill_amount)
                 )
                 if Path(tmp_sorted_folder).exists():
                     shutil.rmtree(tmp_sorted_folder, ignore_errors=True)
