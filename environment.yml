@@ -18,6 +18,7 @@ dependencies:
   - matplotlib
   - networkx
   - numba
+  - numcodecs<0.16.0 # thanks to Josh Posen for this suggestion to resolve a conflict
   - numpy
   - pandas
   - pip
@@ -26,19 +27,18 @@ dependencies:
   - pyqt5-sip
   - pyqtwebengine
   - pyqtgraph
-  - python=3.11 # phy gui makes py311 the maximum, due to imp dependency
+  - python>=3.8,<=3.10 # phy gui makes py311 the maximum, due to imp dependency
   - pytorch
   - torchvision
   - torchaudio
   - ruamel.yaml
-  - scikit-learn
+  - scikit-learn>1.3.2
   - scipy
   - tqdm
   - xarray
   - zarr
   - pip:
-        - "-e ./src/emusort/Kilosort4" # install local Kilosort4 for EMUsort
-        - "numcodecs<0.16.0"
         - "-e ./src/emusort/spikeinterface" # install local spikeinterface for EMUsort
-        - "-e ."
-        - git+https://github.com/cortex-lab/phy.git@7a2494b # last working version of Phy from GitHub
+        - "-e ./src/emusort/Kilosort4" # install local Kilosort4 for EMUsort
+        - git+https://github.com/cortex-lab/phy.git@7a2494b # latest version of phy from GitHub
+        - "-e ." # finally install EMUsort locally
