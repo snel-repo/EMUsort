@@ -1,5 +1,6 @@
 ---
-name: emusort
+# this environment was tested with a remote Linux system with an X11 graphical windowing system
+name: emu2
 channels:
   - conda-forge
   - pytorch
@@ -11,7 +12,7 @@ dependencies:
   - hdbscan
   - ipympl
   - ipywidgets
-  - joblib
+  - joblib=1.4.2
   - jupyter
   - libxcb
   - loky
@@ -19,7 +20,7 @@ dependencies:
   - networkx
   - numba
   - numcodecs<0.16.0 # thanks to Josh Posen for this suggestion to resolve a conflict
-  - numpy
+  - numpy<2.0
   - pandas
   - pip
   - pybind11
@@ -27,8 +28,8 @@ dependencies:
   - pyqt5-sip
   - pyqtwebengine
   - pyqtgraph
-  - python>=3.8,<=3.10 # phy gui makes py311 the maximum, due to imp dependency
-  - pytorch
+  - python>=3.9,<3.12 # phy gui makes py311 the maximum, due to imp dependency
+  - pytorch-gpu
   - torchvision
   - torchaudio
   - ruamel.yaml

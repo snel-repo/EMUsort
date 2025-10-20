@@ -2,7 +2,7 @@
 name = "emusort"
 dynamic = ["version"]
 description = "A command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography"
-requires-python = ">=3.8,<=3.10" # python version constrained by spikeinterface and Phy GUI requirements. Windows Phy seems to not work with Python >= 3.10
+requires-python = ">=3.9,<3.12" # python version constrained by spikeinterface, joblib, and Phy GUI requirements. Windows Phy seems to not work with Python >= 3.10
 authors = [
     { name = "Sean O'Connell", email = "smarkoco@proton.me" },
     { name = "Jonathan A Michaels", email = "jmichae@yorku.ca" },
@@ -10,24 +10,24 @@ authors = [
 license = { file = "LICENSE" }
 readme = "README.md"
 
-dependencies = [
-    "matplotlib",
-    "pandas",
-    "pendulum",
-    "pynvml",
-    "spython",
-    "typing-extensions",
-    "ruamel.yaml",
-    "pyqt5",
-    "pyqtgraph",
-    "pyqt5-sip",
-    "pyqtwebengine",
-    "phy",
-    "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
-    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
-    # "kilosort", 
-    # "spikeinterface",
-]
+# dependencies = [
+#     "matplotlib",
+#     "pandas",
+#     "pendulum",
+#     "pynvml",
+#     "spython",
+#     "typing-extensions",
+#     "ruamel.yaml",
+#     "pyqt5",
+#     "pyqtgraph",
+#     "pyqt5-sip",
+#     "pyqtwebengine",
+#     "phy",
+#     "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
+#     "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
+#     # "kilosort", 
+#     # "spikeinterface",
+# ]
 
 
 [project.urls]
@@ -59,7 +59,22 @@ cu118 = [
     "torch>=2.4.0; sys_platform == 'darwin'",
     "torchaudio>=2.4.0; sys_platform == 'darwin'",
 ]
-
+uv = [
+    "matplotlib",
+    "pandas",
+    "pendulum",
+    "pynvml",
+    "spython",
+    "typing-extensions",
+    "ruamel.yaml",
+    "pyqt5",
+    "pyqtgraph",
+    "pyqt5-sip",
+    "pyqtwebengine",
+    "phy",
+    "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
+    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
+]
 
 [tool.uv]
 conflicts = [
@@ -76,7 +91,8 @@ constraint-dependencies = [
     "pyqt5-qt5 < 5.15.2; sys_platform == 'win32'",
     "pyqtwebengine < 5.15.2; sys_platform == 'win32'",
     "numcodecs < 0.16.0",
-    "joblib<1.5.0",
+    "numpy < 2.0",
+    "joblib=1.4.2",
 ]
 
 [tool.uv.sources]
