@@ -29,30 +29,8 @@ dev = [
 
 [project.optional-dependencies]
 
-core = [
-    "matplotlib",
-    "pandas",
-    "ruamel.yaml",
-    "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
-    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
-]
-cpu = [
-    "torch>=2.4.0",
-    "torchaudio>=2.4.0",
-]
-cu118 = [
-    "torch>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
-    "torchaudio>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
-    "torch>=2.4.0; sys_platform == 'darwin'",
-    "torchaudio>=2.4.0; sys_platform == 'darwin'",
-]
-phy = [
-    "pyqt5",
-    "pyqtgraph",
-    "pyqt5-sip",
-    "pyqtwebengine",
-    "phy",
-]
+## Below are different extras used to specify desired packages during installation.
+# use "full" to install all packages necessary for optimal performance and visualization with Phy
 full = [
     "matplotlib",
     "pandas",
@@ -68,6 +46,36 @@ full = [
     "torchaudio>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
     "torch>=2.4.0; sys_platform == 'darwin'",
     "torchaudio>=2.4.0; sys_platform == 'darwin'",
+]
+# use "core" for a minimal install of emusort dependencies without pytorch
+# you will also need "cpu" or "cu118", for example, running: uv sync --extra core --extra cu118
+core = [
+    "matplotlib",
+    "pandas",
+    "ruamel.yaml",
+    "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
+    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
+]
+# if using the "core" extra, install the cpu version of pytorch
+cpu = [
+    "torch>=2.4.0",
+    "torchaudio>=2.4.0",
+]
+# if using the "core" extra, install the gpu version of pytorch
+cu118 = [
+    "torch>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
+    "torchaudio>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
+    "torch>=2.4.0; sys_platform == 'darwin'",
+    "torchaudio>=2.4.0; sys_platform == 'darwin'",
+]
+# if using the "core" extra, install Phy for visualization
+# the equivalent command to "uv sync --extra full" is "uv sync --extra core --extra cu118 --extra phy"
+phy = [
+    "pyqt5",
+    "pyqtgraph",
+    "pyqt5-sip",
+    "pyqtwebengine",
+    "phy",
 ]
 
 [tool.uv]

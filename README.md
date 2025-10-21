@@ -47,41 +47,41 @@ If you are updating and already previously installed EMUsort, you may encounter 
 
 Before following the below steps, make sure to navigate into the `EMUsort` folder where you cloned the repo.
 
-#### uv (Option 1, Recommended)
+#### uv (Option 1, Recommended for Windows and Linux (local system))
 
 Follow the steps and execute the commands below to install and manage EMUsort with [uv](https://docs.astral.sh/uv/), a high performance Python package and project manager:
 
-> **Windows:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
+> **Windows only:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
 
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
-Then either restart the terminal or execute the command suggested in the terminal to enable using `uv` in the terminal. Next, create the environment and install all dependendencies with `uv`:
+Then either restart the terminal or execute the command suggested in the terminal to enable using `uv` in the terminal. Next, create the environment and install all dependendencies including Phy using `uv`:
 
-    cd /path/to/repo_folder # go into EMUsort clone folder
-    uv sync --extra cu118
+    cd /path/to/repo_folder # go into the EMUsort clone location
+    uv sync --extra full
 
-If the install finished successfully, proceed to the Usage section next.
+If the install finished successfully, proceed to the Usage section next. If you don't want to install Phy, you can use `uv sync --extra core --extra cu118` instead. See `pyproject.toml` for other `--extra` options.
 
-#### Micromamba (Option 2, No Longer Recommended)
+#### Micromamba (Option 2, Recommended for Linux (remote system, e.g., with X11 window manager))
 
 To install micromamba and set up a micromamba environment, follow the steps and execute the commands below:
 
-> **Windows:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
+> **Windows only:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
 
     "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
 
 If this errors out, you can simply download the script from `micro.mamba.pm/install.sh` and run a file with those contents manually with `bash ./install.sh`.
 Afterwards, make sure to restart terminal, and use the old version of pyproject.toml stored as pyproject.toml.bak by renaming it back to pyproject.toml:
 
-    cd /path/to/repo_folder # go into EMUsort clone folder
+    cd /path/to/repo_folder # go into the EMUsort clone location
     micromamba env create -f environment.yml
 
-> **Windows:** During micromamba environment creation, the conda packages usually work, but you may get an error at the end related to the `pip` packages not install installing.
+> **Windows only:** During micromamba environment creation, the conda packages usually work, but you may get an error at the end related to the `pip` packages not install installing.
 > If this happened, it's likely micromamba worked, but the `pip` packages need manual installation. This is a Windows problem. So, go ahead and activate the micromamba environment you just created (`micromamba activate emusort`), and run the following, one by one:
 > `pip install -e ./src/emusort/spikeinterface`
 > `pip install -e ./src/emusort/Kilosort4`
+> `pip install "git+https://github.com/cortex-lab/phy.git@7a2494b"`
 > `pip install -e .`
-> `pip install git+https://github.com/cortex-lab/phy.git`
 > If you encounter errors installing spikeinterface or Kilosort4, try navigating into each submodule folder and running `pip install -e .` to install the packages manually. Then `pip install -e .` in the main folder again to install the main EMUsort package.
 
 If the install finished successfully, proceed to the Usage section next.
@@ -92,11 +92,11 @@ To install miniconda, follow these instructions, making sure to select the optio
 
 - https://docs.anaconda.com/miniconda/#quick-command-line-install
 
-> **Windows:** Open Anaconda Prompt from the Start Menu, and proceed with the below commands
+> **Windows only:** Open Anaconda Prompt from the Start Menu, and proceed with the below commands
 
 Run the below commands in the conda-initialized terminal:
 
-    cd /path/to/repo_folder # go into EMUsort clone folder
+    cd /path/to/repo_folder # go into the EMUsort clone location
     conda env create -f environment.yml
 
 ## Usage
@@ -105,18 +105,18 @@ Run the below commands in the conda-initialized terminal:
 
 Every time you open a new terminal, you must activate the environment, whether manually or automatically (see Advanced Usage for automatic activation).
 
-If `uv` was used, activate the environment using:
+**uv:** activate the environment using
 
-**Windows:** `source /path/to/repo_folder/.venv/Scripts/activate` 
+> *Windows:* `source /path/to/repo_folder/.venv/Scripts/activate` # environment is stored in EMUsort clone location
 
-**Linux/Mac:** `source /path/to/repo_folder/.venv/bin/activate` # activation script is in EMUsort clone folder
+>*Linux/Mac:* `source /path/to/repo_folder/.venv/bin/activate` # environment is stored in EMUsort clone location
 
 
-If `micromamba` was used, activate the environment using:
+**micromamba:** activate the environment using
 
     micromamba activate emusort
 
-If a conda environment was used, activate it using:
+**anaconda:** activate the environment using
 
     conda activate emusort
 
@@ -200,15 +200,17 @@ To automatically activate the environment each time you open a new terminal, app
 
 >**Windows**: If using GitBash (recommended), you may need to replace `~/.bashrc` with `~/.bash_profile` in the below commands
 
-    `uv`: echo "source /path/to/repo_folder/.venv/bin/activate" >> ~/.bashrc
+**uv:** 
+    
+    echo "source /path/to/repo_folder/.venv/bin/activate" >> ~/.bashrc # BE SURE TO ENTER THE REAL PATH
 
-or
+**micromamba:**
+    
+    echo "micromamba activate emusort" >> ~/.bashrc
 
-    `micromamba`: echo "micromamba activate emusort" >> ~/.bashrc
-
-or
-
-    `conda`: echo "conda activate emusort" >> ~/.bashrc
+**conda:**
+    
+    echo "conda activate emusort" >> ~/.bashrc
 
 ### Grid Search Over Multiple Kilosort Parameters to Produce Many Sorts in Parallel
 
