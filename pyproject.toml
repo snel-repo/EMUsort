@@ -1,7 +1,7 @@
 [project]
 name = "emusort"
 dynamic = ["version"]
-description = "A command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography"
+description = "A command line tool for high performance spike sorting of multichannel, single unit electromyography"
 requires-python = ">=3.9,<3.12" # python version constrained by spikeinterface, joblib, and Phy GUI requirements. Windows Phy seems to not work with Python >= 3.10
 authors = [
     { name = "Sean O'Connell", email = "smarkoco@proton.me" },
@@ -9,26 +9,6 @@ authors = [
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
-
-# dependencies = [
-#     "matplotlib",
-#     "pandas",
-#     "pendulum",
-#     "pynvml",
-#     "spython",
-#     "typing-extensions",
-#     "ruamel.yaml",
-#     "pyqt5",
-#     "pyqtgraph",
-#     "pyqt5-sip",
-#     "pyqtwebengine",
-#     "phy",
-#     "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
-#     "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
-#     # "kilosort", 
-#     # "spikeinterface",
-# ]
-
 
 [project.urls]
 Homepage = "https://github.com/snel-repo/EMUsort"
@@ -49,6 +29,13 @@ dev = [
 
 [project.optional-dependencies]
 
+core = [
+    "matplotlib",
+    "pandas",
+    "ruamel.yaml",
+    "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
+    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
+]
 cpu = [
     "torch>=2.4.0",
     "torchaudio>=2.4.0",
@@ -59,13 +46,16 @@ cu118 = [
     "torch>=2.4.0; sys_platform == 'darwin'",
     "torchaudio>=2.4.0; sys_platform == 'darwin'",
 ]
-uv = [
+phy = [
+    "pyqt5",
+    "pyqtgraph",
+    "pyqt5-sip",
+    "pyqtwebengine",
+    "phy",
+]
+full = [
     "matplotlib",
     "pandas",
-    "pendulum",
-    "pynvml",
-    "spython",
-    "typing-extensions",
     "ruamel.yaml",
     "pyqt5",
     "pyqtgraph",
@@ -73,7 +63,11 @@ uv = [
     "pyqtwebengine",
     "phy",
     "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
-    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
+    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface",
+    "torch>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
+    "torchaudio>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
+    "torch>=2.4.0; sys_platform == 'darwin'",
+    "torchaudio>=2.4.0; sys_platform == 'darwin'",
 ]
 
 [tool.uv]
@@ -81,6 +75,22 @@ conflicts = [
     [
         { extra = "cpu" },
         { extra = "cu118" },
+    ],
+    [
+        {extra = "full"},
+        {extra = "core"},
+    ],
+    [
+        {extra = "full"},
+        {extra = "phy"},
+    ],
+    [
+        {extra = "full"},
+        {extra = "cu118"},
+    ],
+    [
+        {extra = "full"},
+        {extra = "cpu"},
     ],
 ]
 constraint-dependencies = [
@@ -92,7 +102,7 @@ constraint-dependencies = [
     "pyqtwebengine < 5.15.2; sys_platform == 'win32'",
     "numcodecs < 0.16.0",
     "numpy < 2.0",
-    "joblib=1.4.2",
+    "joblib == 1.4.2",
 ]
 
 [tool.uv.sources]
@@ -103,19 +113,21 @@ constraint-dependencies = [
 #     {git = "https://github.com/snel-repo/spikeinterface.git"} # spikeinterface snel-repo 
 # ]
 phy = [
-    {git = "https://github.com/cortex-lab/phy.git", rev = "7a2494b"} # Phy GUI 
+    {git = "https://github.com/cortex-lab/phy.git", rev = "7a2494b"} # Phy GUI
 ]
 
-# CPU version
+# Specify CPU/CUDA version for download. Also enable "full" flag to get CUDA
 torch = [
     { index = "pytorch-cpu", extra = "cpu" },
     { index = "pytorch-cu118", extra = "cu118", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
+    { index = "pytorch-cu118-full", extra = "full", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
 ]
 torchaudio = [
     { index = "pytorch-cpu", extra = "cpu" },
     { index = "pytorch-cu118", extra = "cu118", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
+    { index = "pytorch-cu118-full", extra = "full", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
 ]
-
+    
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
@@ -123,5 +135,10 @@ explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu118-full"
 url = "https://download.pytorch.org/whl/cu118"
 explicit = true
