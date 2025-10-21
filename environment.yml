@@ -1,6 +1,6 @@
 ---
 # this environment was tested with a remote Linux system with an X11 graphical windowing system
-name: emu2
+name: emusort
 channels:
   - conda-forge
   - pytorch

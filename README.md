@@ -47,7 +47,8 @@ If you are updating and already previously installed EMUsort, you may encounter 
 
 Before following the below steps, make sure to navigate into the `EMUsort` folder where you cloned the repo.
 
-#### uv (Option 1, Recommended for Windows and Linux (local system))
+#### uv (Option 1)
+##### Recommended for Windows and Linux (local)
 
 Follow the steps and execute the commands below to install and manage EMUsort with [uv](https://docs.astral.sh/uv/), a high performance Python package and project manager:
 
@@ -62,7 +63,8 @@ Then either restart the terminal or execute the command suggested in the termina
 
 If the install finished successfully, proceed to the Usage section next. If you don't want to install Phy, you can use `uv sync --extra core --extra cu118` instead. See `pyproject.toml` for other `--extra` options.
 
-#### Micromamba (Option 2, Recommended for Linux (remote system, e.g., with X11 window manager))
+#### Micromamba (Option 2)
+##### Recommended for Linux (remote, e.g., for use with X11 window manager)
 
 To install micromamba and set up a micromamba environment, follow the steps and execute the commands below:
 
@@ -86,7 +88,8 @@ Afterwards, make sure to restart terminal, and use the old version of pyproject.
 
 If the install finished successfully, proceed to the Usage section next.
 
-#### Conda Environment (Option 3, Not Recommended)
+#### Anaconda (Option 3)
+##### Fallback Method, No Longer Recommended
 
 To install miniconda, follow these instructions, making sure to select the option for your OS:
 
@@ -212,7 +215,7 @@ To automatically activate the environment each time you open a new terminal, app
     
     echo "conda activate emusort" >> ~/.bashrc
 
-### Grid Search Over Multiple Kilosort Parameters to Produce Many Sorts in Parallel
+### Parameter Sweep Over Multiple Kilosort Parameters to Produce Many Sorts in Parallel
 
 If you want to run multiple sort jobs in parallel across a range of KS parameters, edit `emu_config.py` under the `Sorting` section and set the `do_KS_param_gridsearch` field to `true`. Above it, modify `GPU_to_use` to include all the GPUs that should be used. Modify `num_KS_jobs` to specify how many total jobs to distribute across all chosen GPUs.
 
