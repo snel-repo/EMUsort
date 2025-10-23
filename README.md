@@ -29,7 +29,7 @@ Clone the repository recursively onto your machine (for example, in the home dir
 
     git clone --recurse-submodules https://github.com/snel-repo/EMUsort.git
 
-- If you accidentally ran `git clone` without `--recurse-submodules`, just delete the entire `EMUsort` folder and rerun the above command
+> If you accidentally ran `git clone` without `--recurse-submodules`, just delete the entire `EMUsort` folder and rerun the above command
 
 After cloning is complete, you will need to configure a uv, micromamba, or conda environment.
 
@@ -50,34 +50,36 @@ Before following the below steps, make sure to navigate into the `EMUsort` folde
 #### Option 1: [`uv`](https://docs.astral.sh/uv/)
 **Recommended for Windows and Linux (not using Remote Desktop)**
 
-Follow the steps and execute the commands below to install and manage EMUsort with [`uv`](https://docs.astral.sh/uv/), a high performance Python package and project manager:
+Follow the steps and execute the commands below to install and manage EMUsort with `uv`, a high performance Python package and project manager:
 
 > **Windows only:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
 
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
-Then either restart the terminal or execute the command suggested in the terminal to enable using [`uv`](https://docs.astral.sh/uv/) in the terminal. Next, create the environment and install all dependendencies including Phy, using [`uv`](https://docs.astral.sh/uv/):
+Then either restart the terminal or execute the command suggested in the terminal to enable using `uv` in the terminal. Next, create the environment and install all dependendencies including Phy, using `uv`:
 
-    cd /path/to/repo_folder # go into the EMUsort clone location
->**Windows:** (seems most stable with python version 3.9, but others can be tried if necessary)
-`uv sync --extra full --python 3.9`
+    cd /path/to/repo_folder # go into the EMUsort clone location  
+>**Windows only:** Windows seems most stable using Python version 3.9, so be sure to use the `--python 3.9` option with the below command.
+>For example: `uv sync --extra full --python 3.9`.
+>Other Python versions can be tried afterwards, if necessary.
 
->**Linux/Mac:**
-`uv sync --extra full`   
+Use `uv` to execute the installation with the "full" option, which will install Kilosort4 (with modifications), SpikeInterface, PyTorch, and Phy GUI. See `pyproject.toml` for more "--extra" options.
+
+    uv sync --extra full
 
 If the install finished successfully, proceed to the [Usage](https://github.com/snel-repo/EMUsort?tab=readme-ov-file#usage) section next.
 
 #### Option 2: [`micromamba`](https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html)
 **Recommended for Linux (remote, e.g., for use over Remote Desktop with X11 on remote system)**
 
-To install [`micromamba`](https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html) and set up a [`micromamba`](https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html) environment, follow the steps and execute the commands below:
+To install `micromamba` and set up a `micromamba` environment, follow the steps and execute the commands below:
 
 > **Windows only:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
 
     "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
 
 If this errors out, you can simply download the script from `micro.mamba.pm/install.sh` and run a file with those contents manually with `bash ./install.sh`.
-Afterwards, make sure to either restart the terminal or initialize [`micromamba`](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html) directly, then run the below commands:
+Afterwards, make sure to either restart the terminal or [initialize](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html) `micromamba` directly, then run the below commands:
 
     cd /path/to/repo_folder # go into the EMUsort clone location
     micromamba env create -f environment.yml
@@ -93,15 +95,15 @@ Afterwards, make sure to either restart the terminal or initialize [`micromamba`
 If the install finished successfully, proceed to the [Usage](https://github.com/snel-repo/EMUsort?tab=readme-ov-file#usage) section next.
 
 #### Option 3: [`anaconda/miniconda`](https://www.anaconda.com/docs/getting-started/miniconda/main)
-##### Fallback Method, No Longer Recommended
+**Fallback Method, No Longer Recommended**
 
-To install [`miniconda`](https://www.anaconda.com/docs/getting-started/miniconda/main), follow the link below, making sure to select the correct option for your OS:
+To install `miniconda`, follow the link below, making sure to select the correct option for your OS:
 
 - https://www.anaconda.com/docs/getting-started/miniconda/install#quickstart-install-instructions
 
 > **Windows only:** Open Anaconda Prompt from the Start Menu, and proceed with the below commands
 
-Make sure restart the terminal or initialize [`conda`](https://www.anaconda.com/docs/getting-started/miniconda/install#manual-shell-initialization) in the terminal, then run the below commands:
+Make sure restart the terminal or [initialize](https://www.anaconda.com/docs/getting-started/miniconda/install#manual-shell-initialization) `conda` in the terminal, then run the below commands:
 
     cd /path/to/repo_folder # go into the EMUsort clone location
     conda env create -f environment.yml
@@ -110,16 +112,11 @@ Make sure restart the terminal or initialize [`conda`](https://www.anaconda.com/
 
 ### Python Environment Activation
 
-Every time you open a new terminal, you must activate the environment, whether manually or automatically (see Advanced Usage for automatic activation).
+Every time you open a new terminal, the environment must be activated, whether manually or automatically (see [Advanced Usage](https://github.com/snel-repo/EMUsort?tab=readme-ov-file#advanced-usage) for automatic activation).
 
-**uv:** 
-
->**Windows:** Activate the virtual environment using:
-`source /path/to/repo_folder/.venv/Scripts/activate`
-
->**Linux/Mac:** Activate the virtual environment using:
-`source /path/to/repo_folder/.venv/bin/activate`
-
+**uv:**  
+- Linux: `source /path/to/repo_folder/.venv/bin/activate`  
+- Windows: `source /path/to/repo_folder/.venv/Scripts/activate`  
 
 **micromamba:**
 
@@ -207,7 +204,7 @@ For more information on `phy`, see documentation at the main repo: [https://phy.
 
 To automatically activate the environment each time you open a new terminal, append to the end of your `~/.bashrc` file the activation command, depending on which environment manager you are using, execute:
 
->**Windows**: If using GitBash (recommended), you may need to replace `~/.bashrc` with `~/.bash_profile` in the below commands
+>**Windows only**: If using GitBash (recommended), you may need to replace `~/.bashrc` with `~/.bash_profile` in the below commands. For `uv`, you must also swap to `source /path/to/repo_folder/.venv/Scripts/activate`.
 
 **uv:** 
     
