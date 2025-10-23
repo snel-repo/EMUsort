@@ -48,7 +48,7 @@ If you are updating and already previously installed EMUsort, you may encounter 
 Before following the below steps, make sure to navigate into the `EMUsort` folder where you cloned the repo.
 
 #### Option 1: [`uv`](https://docs.astral.sh/uv/)
-**Recommended for Windows and Linux (not using Remote Desktop)**
+**Recommended for Windows and Linux (see Option 2 if using Linux over RDP)**
 
 Follow the steps and execute the commands below to install and manage EMUsort with `uv`, a high performance Python package and project manager:
 
