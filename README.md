@@ -47,33 +47,37 @@ If you are updating and already previously installed EMUsort, you may encounter 
 
 Before following the below steps, make sure to navigate into the `EMUsort` folder where you cloned the repo.
 
-#### uv (Option 1)
-##### Recommended for Windows and Linux (local)
+#### Option 1: [`uv`](https://docs.astral.sh/uv/)
+**Recommended for Windows and Linux (not using Remote Desktop)**
 
-Follow the steps and execute the commands below to install and manage EMUsort with [uv](https://docs.astral.sh/uv/), a high performance Python package and project manager:
+Follow the steps and execute the commands below to install and manage EMUsort with [`uv`](https://docs.astral.sh/uv/), a high performance Python package and project manager:
 
 > **Windows only:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
 
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
-Then either restart the terminal or execute the command suggested in the terminal to enable using `uv` in the terminal. Next, create the environment and install all dependendencies including Phy using `uv`:
+Then either restart the terminal or execute the command suggested in the terminal to enable using [`uv`](https://docs.astral.sh/uv/) in the terminal. Next, create the environment and install all dependendencies including Phy, using [`uv`](https://docs.astral.sh/uv/):
 
     cd /path/to/repo_folder # go into the EMUsort clone location
-    uv sync --extra full
+>**Windows:** (seems most stable with python version 3.9, but others can be tried if necessary)
+`uv sync --extra full --python 3.9`
 
-If the install finished successfully, proceed to the Usage section next. If you don't want to install Phy, you can use `uv sync --extra core --extra cu118` instead. See `pyproject.toml` for other `--extra` options.
+>**Linux/Mac:**
+`uv sync --extra full`   
 
-#### Micromamba (Option 2)
-##### Recommended for Linux (remote, e.g., for use with X11 window manager)
+If the install finished successfully, proceed to the [Usage](https://github.com/snel-repo/EMUsort?tab=readme-ov-file#usage) section next.
 
-To install micromamba and set up a micromamba environment, follow the steps and execute the commands below:
+#### Option 2: [`micromamba`](https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html)
+**Recommended for Linux (remote, e.g., for use over Remote Desktop with X11 on remote system)**
+
+To install [`micromamba`](https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html) and set up a [`micromamba`](https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html) environment, follow the steps and execute the commands below:
 
 > **Windows only:** Install [GitBash](https://gitforwindows.org/) first with default settings and use its shell to use EMUsort.
 
     "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
 
 If this errors out, you can simply download the script from `micro.mamba.pm/install.sh` and run a file with those contents manually with `bash ./install.sh`.
-Afterwards, make sure to restart terminal, and use the old version of pyproject.toml stored as pyproject.toml.bak by renaming it back to pyproject.toml:
+Afterwards, make sure to either restart the terminal or initialize [`micromamba`](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html) directly, then run the below commands:
 
     cd /path/to/repo_folder # go into the EMUsort clone location
     micromamba env create -f environment.yml
@@ -86,18 +90,18 @@ Afterwards, make sure to restart terminal, and use the old version of pyproject.
 > `pip install -e .`
 > If you encounter errors installing spikeinterface or Kilosort4, try navigating into each submodule folder and running `pip install -e .` to install the packages manually. Then `pip install -e .` in the main folder again to install the main EMUsort package.
 
-If the install finished successfully, proceed to the Usage section next.
+If the install finished successfully, proceed to the [Usage](https://github.com/snel-repo/EMUsort?tab=readme-ov-file#usage) section next.
 
-#### Anaconda (Option 3)
+#### Option 3: [`anaconda/miniconda`](https://www.anaconda.com/docs/getting-started/miniconda/main)
 ##### Fallback Method, No Longer Recommended
 
-To install miniconda, follow these instructions, making sure to select the option for your OS:
+To install [`miniconda`](https://www.anaconda.com/docs/getting-started/miniconda/main), follow the link below, making sure to select the correct option for your OS:
 
-- https://docs.anaconda.com/miniconda/#quick-command-line-install
+- https://www.anaconda.com/docs/getting-started/miniconda/install#quickstart-install-instructions
 
 > **Windows only:** Open Anaconda Prompt from the Start Menu, and proceed with the below commands
 
-Run the below commands in the conda-initialized terminal:
+Make sure restart the terminal or initialize [`conda`](https://www.anaconda.com/docs/getting-started/miniconda/install#manual-shell-initialization) in the terminal, then run the below commands:
 
     cd /path/to/repo_folder # go into the EMUsort clone location
     conda env create -f environment.yml
@@ -108,18 +112,20 @@ Run the below commands in the conda-initialized terminal:
 
 Every time you open a new terminal, you must activate the environment, whether manually or automatically (see Advanced Usage for automatic activation).
 
-**uv:** activate the environment using
+**uv:** 
 
-> *Windows:* `source /path/to/repo_folder/.venv/Scripts/activate` # environment is stored in EMUsort clone location
+>**Windows:** Activate the virtual environment using:
+`source /path/to/repo_folder/.venv/Scripts/activate`
 
->*Linux/Mac:* `source /path/to/repo_folder/.venv/bin/activate` # environment is stored in EMUsort clone location
+>**Linux/Mac:** Activate the virtual environment using:
+`source /path/to/repo_folder/.venv/bin/activate`
 
 
-**micromamba:** activate the environment using
+**micromamba:**
 
     micromamba activate emusort
 
-**anaconda:** activate the environment using
+**anaconda:**
 
     conda activate emusort
 
@@ -127,7 +133,7 @@ Every time you open a new terminal, you must activate the environment, whether m
 
 EMUsort relies on a main "session folder", which contains the below 4 items.
 
-- For Intan, NWB, Blackrock, or Binary datasets, all you need to do is create a new session folder to contain your desired dataset files (Item #1 below). Note that nested folders are fine but use the leaf folder.
+- For Intan, NWB, Blackrock, or Binary datasets, all you need to do is create a new session folder to contain your desired dataset files (Item #1 below).
 - For Open Ephys, the session folder itself (dated folder containing 'Record Node ###') will act as the session folder. The original dataset files will not be modified.
 
 Items #2-4, will be generated automatically inside the provided session folder.
@@ -205,15 +211,15 @@ To automatically activate the environment each time you open a new terminal, app
 
 **uv:** 
     
-    echo "source /path/to/repo_folder/.venv/bin/activate" >> ~/.bashrc # BE SURE TO ENTER THE REAL PATH
+    echo "source /path/to/repo_folder/.venv/bin/activate" >> ~/.bashrc # USING YOUR VALID PATH
 
 **micromamba:**
     
-    echo "micromamba activate emusort" >> ~/.bashrc
+    echo "micromamba activate emusort" >> ~/.bashrc # USING YOUR VALID PATH
 
 **conda:**
     
-    echo "conda activate emusort" >> ~/.bashrc
+    echo "conda activate emusort" >> ~/.bashrc # USING YOUR VALID PATH
 
 ### Parameter Sweep Over Multiple Kilosort Parameters to Produce Many Sorts in Parallel
 
