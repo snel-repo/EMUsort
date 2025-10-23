@@ -41,5 +41,5 @@ dependencies:
   - pip:
         - "-e ./src/emusort/spikeinterface" # install local spikeinterface for EMUsort
         - "-e ./src/emusort/Kilosort4" # install local Kilosort4 for EMUsort
-        - git+https://github.com/cortex-lab/phy.git@7a2494b # latest version of phy from GitHub
+        - git+https://github.com/cortex-lab/phy.git@7a2494b # latest working version of phy from GitHub
         - "-e ." # finally install EMUsort locally
