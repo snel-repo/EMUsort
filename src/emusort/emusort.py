@@ -1,8 +1,8 @@
 import sys
 
-if sys.version_info < (3, 5):
+if sys.version_info < (3, 9):
     sys.exit(
-        "Error: Your Python version is not supported. Please use Python 3.5 or later."
+        "Error: Your Python version is not supported. Please use Python 3.9 or later."
     )
 
 from datetime import datetime
@@ -78,6 +78,7 @@ def create_probe(recording_obj):
         x = 0
         y = i
         positions[i] = x, y
+    # make interchannel distance as small as possible to encourage template formation across many channels
     positions[:, 1] *= -2
 
     probe = Probe(ndim=2, si_units="um")
@@ -278,7 +279,7 @@ def load_ephys_data(
 
 
 def preprocess_ephys_data(
-    recording_obj: si.ChannelSliceRecording, this_config: dict, iGroup: Union[int]
+    recording_obj: si.ChannelSliceRecording, this_config: dict, iChanGroup: Union[int]
 ) -> Union[si.ChannelSliceRecording, si.FrameSliceRecording]:
     """
     Preprocesses the electrophysiological data based on the specified configuration.
@@ -309,34 +310,34 @@ def preprocess_ephys_data(
             "Time range must be disabled if concatenating recordings (i.e., time_range: [0, 0])."
         )
     # concatenate the recordings if it's the first sort group, otherwise simply load it from last iteration
-    if len(emg_recordings_to_use) > 1 and iGroup == 0:
+    if len(emg_recordings_to_use) > 1 and iChanGroup == 0:
         loaded_recording = concatenate_emg_data(
             this_config["Data"]["session_folder"],
             emg_recordings_to_use,
             recording_obj,
             this_config,
         )
-    elif len(emg_recordings_to_use) > 1 and iGroup > 0:
+    elif len(emg_recordings_to_use) > 1 and iChanGroup > 0:
         concat_data_path = this_config["Data"]["session_folder"] / "concatenated_data"
         loaded_recording = si.load_extractor(concat_data_path)
     else:
         loaded_recording = recording_obj.select_segments(emg_recordings_to_use)
 
     # check for [all] in emg_chan_list
-    if this_config["Group"]["emg_chan_list"][iGroup][0] == "all":
-        this_config["Group"]["emg_chan_list"][iGroup] = np.arange(
+    if this_config["Group"]["emg_chan_list"][iChanGroup][0] == "all":
+        this_config["Group"]["emg_chan_list"][iChanGroup] = np.arange(
             loaded_recording.get_num_channels()
         ).tolist()
         # remove any ADC channels from the list for OpenEphys recordings
         if this_config["Data"]["dataset_type"] == "openephys":
-            this_config["Group"]["emg_chan_list"][iGroup] = [
+            this_config["Group"]["emg_chan_list"][iChanGroup] = [
                 int(chan_idx)
-                for chan_idx in this_config["Group"]["emg_chan_list"][iGroup]
+                for chan_idx in this_config["Group"]["emg_chan_list"][iChanGroup]
                 if "ADC" not in str(loaded_recording.get_channel_ids()[chan_idx])
             ]
     # slice channels for this group
     selected_channel_ids = loaded_recording.get_channel_ids()[
-        this_config["Group"]["emg_chan_list"][iGroup]
+        this_config["Group"]["emg_chan_list"][iChanGroup]
     ]
     # Slice the recording to include only the specified channels
     sliced_recording = loaded_recording.channel_slice(selected_channel_ids)
@@ -363,7 +364,7 @@ def preprocess_ephys_data(
         freq_min=this_config["Data"]["emg_passband"][0],
         freq_max=this_config["Data"]["emg_passband"][1],
     )
-    remove_bad_emg_chans = this_config["Group"]["remove_bad_emg_chans"][iGroup]
+    remove_bad_emg_chans = this_config["Group"]["remove_bad_emg_chans"][iChanGroup]
     # detect bad channels on filtered recording
     if isinstance(remove_bad_emg_chans, bool):
         bad_channel_ids, _ = spre.detect_bad_channels(recording_filtered, method="mad")
@@ -406,25 +407,23 @@ def preprocess_ephys_data(
         )
     else:
         bad_channel_ids = None
-
+    good_channel_ids = [
+        ch for ch in recording_filtered.get_channel_ids() if ch not in bad_channel_ids
+    ]
     if bad_channel_ids is None and remove_bad_emg_chans == True:
         print("No bad channels detected.")
     elif remove_bad_emg_chans == False:
         print(
-            f"Bad channels detected: {bad_channel_ids}, and none were removed because remove_bad_emg_chans is set to False."
+            f"Bad channels detected: {bad_channel_ids}, and none were automatically removed because remove_bad_emg_chans is set to False."
         )
     else:
         print("Bad channels being removed:\n" + str(bad_channel_ids))
         recording_filtered = recording_filtered.channel_slice(
             # the below line resulted in an unintended reordering of channels, replaced with list comp
             # np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids)
-            [
-                ch
-                for ch in recording_filtered.get_channel_ids()
-                if ch not in bad_channel_ids
-            ]
+            good_channel_ids
         )
-
+    print(f"Using channels: {good_channel_ids}")
     # Apply notch filter to the EMG data
     recording_notch = spre.notch_filter(
         recording_filtered, freq=60, q=30
@@ -534,7 +533,7 @@ def concatenate_emg_data(
     return recording_concatenated
 
 
-def get_emusort_scores(we, ii):
+def get_emusort_scores(we, wid):
     ### Compute sorting quality metrics, Overall EMUsort score
     def get_t1_scores(we):
         ## Check Type I errors (false positives)
@@ -620,14 +619,14 @@ def get_emusort_scores(we, ii):
     # get quality metric report string for this worker
     report = (
         "------------------------------------------------------------\n"
-        f" Worker {ii} Quality Scores Report:\n"
+        f" Worker {wid} Quality Scores Report:\n"
         f" SNR scores:\n{clipped_snr_scores}\n"
         f" Firing rate validity:\n{firing_rate_validity_scores}\n"
         f" Type I error scores:\n{type_I_scores}\n"
         f" Type II error scores:\n{type_II_scores}\n"
         f" EMUsort scores:\n{emusort_scores}\n"
         "------------------------------------------------------------\n"
-        f" Worker {ii} Overall EMUsort score: {emusort_score:.3f}\n"
+        f" Worker {wid} Overall EMUsort score: {emusort_score:.3f}\n"
         "------------------------------------------------------------\n"
     )
     return (
@@ -648,7 +647,7 @@ def write_rec_and_params(
     this_config,
     use_relative_path=True,
     dtype=None,
-    **job_kwargs
+    **job_kwargs,
 ):
     # save dat file
     if dtype is None:
@@ -686,31 +685,19 @@ def write_rec_and_params(
         f.write(f"hp_filtered = {we.is_filtered()}")
 
 
-async def extract_sorting_result(this_sorting, this_config, this_job, ii):
+async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     """
     Asynchronous version of extract_sorting_result, offloading blocking I/O tasks to background threads.
     """
     # Save sorting results by exporting to Phy format
     sorted_folder = Path(this_config["Sorting"]["sorted_folder"])
-    # waveforms_folder = sorted_folder / "waveforms"
-    # phy_folder = sorted_folder / "phy"
-
-    # If these folders already exist, delete the contents
-    # if waveforms_folder.exists():
-    #     await asyncio.to_thread(shutil.rmtree, waveforms_folder)
-    # if phy_folder.exists():
-    #     await asyncio.to_thread(shutil.rmtree, phy_folder)
-    # if waveforms_folder.exists():
-    #     shutil.rmtree(waveforms_folder)
-    # if phy_folder.exists():
-    #     shutil.rmtree(phy_folder)
 
     # get nt size from the sorting object, which is the width of the waveforms
     sampling_frequency = this_sorting.get_sampling_frequency()
     nt = this_config["KS"]["nt"]
     ms_buffer = nt / sampling_frequency * 1000 / 2
     print(
-        f"Worker {ii} extracting waveforms with nt={nt} at fs={sampling_frequency} Hz (ms_before=ms_after={np.round(ms_buffer, 3)} ms)."
+        f"Worker {wid} extracting waveforms with nt={nt} at fs={sampling_frequency} Hz (ms_before=ms_after={np.round(ms_buffer, 3)} ms)."
     )
 
     try:
@@ -745,7 +732,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
             # overwrite=True,
             sparse=False,
         )
-    print(f"Worker {ii} finished extracting waveforms, computing quality metrics...")
+    print(f"Worker {wid} finished extracting waveforms, computing quality metrics...")
 
     # Compute quality metrics asynchronously
     (
@@ -756,7 +743,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
         emusort_scores,
         emusort_score,
         report,
-    ) = get_emusort_scores(we, ii)
+    ) = get_emusort_scores(we, wid)
 
     # get channel noise levels
     try:
@@ -779,7 +766,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     this_config["Results"]["type_I_scores"] = type_I_scores.tolist()
     this_config["Results"]["type_II_scores"] = type_II_scores.tolist()
     this_config["Results"]["emusort_scores"] = emusort_scores.tolist()
-    print(f"Worker {ii} exporting to Phy format...")
+    print(f"Worker {wid} exporting to Phy format...")
 
     # Export to Phy format asynchronously
     # await asyncio.to_thread(
@@ -805,67 +792,51 @@ async def extract_sorting_result(this_sorting, this_config, this_job, ii):
     )
 
     print(
-        f"Worker {ii} finished exporting to Phy format, consolidating files into final folder..."
+        f"Worker {wid} finished exporting to Phy format, consolidating files into final folder..."
     )
 
-    # Move all files and subdirectories from sorter_output and phy_folder into sorted_folder
-    # await asyncio.to_thread(movetree, sorter_output, sorted_folder)
-    # await asyncio.to_thread(movetree, phy_folder, sorted_folder)
-    # await asyncio.to_thread(shutil.rmtree, sorter_output, ignore_errors=True)
-    # await asyncio.to_thread(shutil.rmtree, phy_folder, ignore_errors=True)
-    # movetree(phy_folder, sorted_folder)
-    # shutil.move(phy_folder / "recording.dat", sorted_folder / "recording.dat")
-    # shutil.move(phy_folder / "params.py", sorted_folder / "params.py")
-    # shutil.rmtree(phy_folder, ignore_errors=True)
-
-    # Move results into file folder for storage
+    # Create timestamp with microsecond precision to prevent duplicate folder names
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
-    Th_this_config = (
-        this_config["KS"]["Th_universal"],
-        this_config["KS"]["Th_learned"],
-        tuple(this_config["KS"]["Th_single_ch"]),
-    )
 
-    # if no gridsearch was done, do not use the params_suffix
-    if this_config["Sorting"]["do_KS_param_gridsearch"] == 0:
-        params_suffix = ""
+    # build params_suffix as a string without trailing underscore
+    if this_config["Sorting"]["do_KS_param_sweep"] == 1:
+        param_strings = [
+            f"P{pid}_{this_config['KS'][param_key]}"
+            for pid, param_key in enumerate(
+                this_config["Sorting"]["KS_params_to_sweep"].keys()
+            )
+        ]
+        params_suffix = "_" + "_".join(param_strings) if param_strings else ""
     else:
-        params_suffix = (
-            f"Th_{Th_this_config[0]},{Th_this_config[1]}_spkTh_{Th_this_config[2]})"
-        )
-    # add timestamp to the final filename
-    final_filename = f'{str(sorted_folder).split("_wkr")[0]}_{params_suffix}'
-    final_filename = final_filename.replace("sorted_", f"sorted_{time_stamp_us}_")
-    # remove _g0 if there is only one group
+        params_suffix = ""
+
+    sorted_folder = this_config["Sorting"]["sorted_folder"]
+    base_name = Path(sorted_folder).name.split("_wkr", 1)[0]
+
+    # construct filename string (assumes "sorted_" always present)
+    name = f"{base_name}{params_suffix}"
+    name = name.replace("sorted_", f"sorted_{time_stamp_us}_", 1)
+
     if len(this_config["Group"]["emg_chan_list"]) == 1:
-        final_filename = final_filename.replace("_g0", "")
-    # remove any spaces or parentheses from the filename
-    final_filename = Path(final_filename)
-    final_filename = final_filename.with_name(final_filename.name.replace(" ", ""))
-    final_filename = final_filename.with_name(final_filename.name.replace("(", ""))
-    final_filename = final_filename.with_name(final_filename.name.replace(")", ""))
-    final_filename = str(final_filename)
-    # remove any trailing commas or underscores
-    while final_filename[-1] in [",", "_"]:
-        final_filename = final_filename[:-1]
+        name = name.replace("_g0", "")
 
-    # append score to the final filename
-    final_filename += f"_SCORE_{emusort_score:.3f}"
+    # remove unwanted chars and trailing commas/underscores
+    name = "".join(ch for ch in name if ch not in " ()[]").rstrip(",_")
+
+    # append score and optional tag
+    name = f"{name}_SCORE_{emusort_score:.3f}"
     if this_config["sort_type"] == "ks4":
-        final_filename += "_KS4"
-    # Rename the folder to preserve the latest sorting results
-    # await asyncio.to_thread(shutil.move, this_config["Sorting"]["sorted_folder"], final_filename)
-    shutil.move(this_config["Sorting"]["sorted_folder"], final_filename)
+        name += "_KS4"
 
-    # Dump this_config and save other required files
-    dump_yaml(Path(final_filename).joinpath("emu_config.yaml"), this_config)
-    np.save(
-        Path(final_filename).joinpath("emg_chans_used.npy"),
-        this_config["emg_chans_used"],
-    )
-    # make the phy command string
-    phy_msg = f"\nTo view Worker {ii} result in Phy, run:\nphy template-gui {str(Path(final_filename).joinpath('params.py'))}\n"
-    # return 2 strings to print to console later
+    final_path = Path(sorted_folder).parent / name
+
+    # move and save
+    shutil.move(sorted_folder, final_path)
+    dump_yaml(final_path / "emu_config.yaml", this_config)
+    np.save(final_path / "emg_chans_used.npy", this_config["emg_chans_used"])
+
+    phy_msg = f"\nTo view Worker {wid} result in Phy, run:\nphy template-gui {final_path / 'params.py'}\n"
+
     return [report, phy_msg]
 
 
@@ -875,8 +846,8 @@ async def extract_concurrently(
     print("Extracting sorting results asynchronously...")
     # Create a task for each worker job
     tasks = []
-    for ii, sorting in enumerate(sortings):
-        task = extract_sorting_result(sorting, these_configs[ii], job_list[ii], ii)
+    for wid, sorting in enumerate(sortings):
+        task = extract_sorting_result(sorting, these_configs[wid], job_list[wid], wid)
         tasks.append(task)
 
     # Chunk tasks into smaller batches to avoid "too many open files" error
@@ -961,13 +932,6 @@ def run_KS_sorting(job_list, these_configs):
             max_concurrent_tasks=these_configs[0]["SI"]["max_concurrent_tasks"],
         )
     )
-    # except Exception as e:
-    #     raise Exception(
-    #         "Error in parallel extraction of sorting results, try reducing num_KS_jobs in 'Sorting' section of emu_config.yaml next time. ..."
-    #     ) from e
-
-    # for ii, sorting in enumerate(sortings):
-    #     extract_sorting_result(sorting, ii)
     return msgs
 
 
@@ -990,9 +954,10 @@ def main():
         help="Reset the configuration file to the default EMUsort template",
     )
     parser.add_argument(  # ability to reset the config file for KS4 default settings
-        "--ks4-reset-config",
+        "-k",
+        "--ks4",
         action="store_true",
-        help="Reset the configuration file to the default Kilosort4 template",
+        help="Run EMUsort using the Kilosort4 configuration file",
     )
     parser.add_argument(
         "-s", "--sort", action="store_true", help="Perform spike sorting"
@@ -1004,7 +969,7 @@ def main():
     repo_folder_path = Path(__file__).parent.parent.parent
 
     # Generate, reset, or load config file
-    if args.ks4_reset_config:
+    if args.ks4:
         config_file_path = (
             Path(args.folder).expanduser().resolve().joinpath("ks4_config.yaml")
         )
@@ -1013,12 +978,12 @@ def main():
             Path(args.folder).expanduser().resolve().joinpath("emu_config.yaml")
         )
     # if the config doesn't exist or user wants to reset, load the config template
-    if not config_file_path.exists() or args.reset_config or args.ks4_reset_config:
+    if not config_file_path.exists() or args.reset_config:
         print(f"Generating config file from default template: \n{config_file_path}\n")
         create_config(
             repo_folder_path,
             Path(args.folder).expanduser().resolve(),
-            ks4=args.ks4_reset_config,
+            ks4=args.ks4,
         )
 
     # open text editor to validate or edit the configuration file if desired
@@ -1069,48 +1034,132 @@ def main():
             full_config["Sorting"]["output_folder"].mkdir(parents=True, exist_ok=True)
 
         # loop through each group of EMG channels to sort independently
-        for iGroup, emg_chan_list in enumerate(full_config["Group"]["emg_chan_list"]):
-            preproc_recording = preprocess_ephys_data(recording, full_config, iGroup)
+        for iChanGroup, emg_chan_list in enumerate(
+            full_config["Group"]["emg_chan_list"]
+        ):
+            preproc_recording = preprocess_ephys_data(
+                recording, full_config, iChanGroup
+            )
             grp_zfill_amount = len(str(len(full_config["Group"]["emg_chan_list"])))
             this_group_sorted_folder = (
                 Path(full_config["Sorting"]["output_folder"])
-                / f'sorted_g{str(iGroup).zfill(grp_zfill_amount)}_{Path(full_config["Data"]["session_folder"]).name}'
+                / f'sorted_g{str(iChanGroup).zfill(grp_zfill_amount)}_{Path(full_config["Data"]["session_folder"]).name}'
             )
             print(f"Recording information: {preproc_recording}")
-            # full_config["sort_group"] = iGroup
-            iParams = list(
-                ParameterGrid(full_config["Sorting"]["gridsearch_KS_params"])
-            )  # get iterator of all possible param combinations
-            if full_config["Sorting"]["do_KS_param_gridsearch"] == 0:
-                # grab the first element of the ParameterGrid iterator, which is the default dictionary
-                iParams = [iParams[0]]
 
-            # create new folders if running in parallel
-            total_KS_jobs = len(iParams)
+            ## do not overwrite KS section unless param sweep enabled
+            if full_config["Sorting"]["do_KS_param_sweep"] == 0:
+                total_KS_jobs = 1
+            else:
+                if full_config["Sorting"]["KS_params_to_sweep"] is None:
+                    KS_params_to_sweep = []
+                else:
+                    # input verification
+                    for dct in full_config["Sorting"]["KS_params_to_sweep"]:
+                        key, val = zip(*dct.items())
+                        assert key in [
+                            key for key, _ in full_config["KS"]
+                        ], "Keys in KS_params_to_sweep must be a parameter in the KS section."
+                        try:
+                            assert isinstance(val, list)
+                            for elem in val:
+                                assert isinstance(elem, list)
+                        except AssertionError as e:
+                            raise AssertionError(
+                                "Elements of KS_params_to_sweep must be key-value pairs, where values are lists"
+                            ) from e
+                    # passed verification
+                    KS_params_to_sweep = deepcopy(
+                        full_config["Sorting"]["KS_params_to_sweep"]
+                    )
+                    KS_params_to_sweep_orig_keys = list(KS_params_to_sweep.keys())
+
+                if full_config["Sorting"]["grouped_params_for_sweep"] is None:
+                    grouped_param_groups_list = []
+                else:
+                    # input verification
+                    try:
+                        for lst in full_config["Sorting"]["grouped_params_for_sweep"]:
+                            assert isinstance(lst, list)
+                            for key in lst:
+                                assert isinstance(key, str)
+                    except AssertionError as e:
+                        raise AssertionError(
+                            "Elements of grouped_params_for_sweep must be lists of strings (parameter keys)"
+                        ) from e
+                    # passed verification
+                    grouped_param_groups_list = full_config["Sorting"][
+                        "grouped_params_for_sweep"
+                    ]
+
+                # set grouped parameters as separate entries with a new group key
+                # take the keys in the order specified in KS_params_to_sweep to preserve expected order
+                for gid, grouped_params_keys in enumerate(grouped_param_groups_list):
+                    KS_params_to_sweep[f"gp{gid}"] = [
+                        # list(gval) for gval in zip(*(params[k] for k in grouped_params_list))
+                        list(gval)
+                        for gval in zip(
+                            *(  # unpack values from dictionaries so they can be zipped
+                                KS_params_to_sweep[
+                                    k
+                                ]  # make sure order is determined by KS_params_to_sweep
+                                for k in [
+                                    key
+                                    for key in KS_params_to_sweep_orig_keys
+                                    if str(key) in grouped_params_keys
+                                ]
+                            )
+                        )
+                    ]
+                    # get rid of the individual keys that are in groups now
+                    for key in grouped_params_keys:
+                        del KS_params_to_sweep[key]
+                worker_params_list = list(
+                    ParameterGrid(KS_params_to_sweep)
+                )  # get iterator of all possible param combinations
+                # now replace the gp# keys in each dictionary with the corresponding key-value pairs
+                for wid, worker_params in enumerate(worker_params_list):
+                    for gid, grouped_params_keys in enumerate(
+                        grouped_param_groups_list
+                    ):
+                        # make sure order is determined by KS_params_to_sweep
+                        for key, param_key in enumerate(
+                            [
+                                key
+                                for key in KS_params_to_sweep_orig_keys
+                                if str(key) in grouped_params_keys
+                            ]
+                        ):
+                            worker_params[param_key] = worker_params[f"gp{gid}"][key]
+                        del worker_params[f"gp{gid}"]
+                        worker_params_list[wid] = worker_params
+                total_KS_jobs = len(worker_params_list)
 
             worker_ids = np.arange(total_KS_jobs)
             torch_device_ids = [
                 str(
                     full_config["Sorting"]["GPU_to_use"][
-                        j % len(full_config["Sorting"]["GPU_to_use"])
+                        wid % len(full_config["Sorting"]["GPU_to_use"])
                     ]
                 )
-                for j in worker_ids
+                for wid in worker_ids
             ]
             # ensure proper configuration for parallel jobs
             if full_config["Sorting"]["num_KS_jobs"] > 1:
                 assert (
-                    full_config["Sorting"]["do_KS_param_gridsearch"] == 1
-                ), "Parallel jobs can only be used when do_KS_param_gridsearch is set to True"
+                    full_config["Sorting"]["do_KS_param_sweep"] == 1
+                ), "Parallel jobs can only be used when do_KS_param_sweep is set to True. Set num_KS_jobs to 1 if do_KS_param_sweep is False."
             # create new folder for each parallel job to store results temporarily
             these_configs = []
             recording_list = []
             # loop through each parallel job and create separate config files for each
-            for iW in worker_ids:
+            for wid in worker_ids:
                 # create new folder for each parallel job
                 zfill_amount = len(str(full_config["Sorting"]["num_KS_jobs"]))
                 tmp_sorted_folder = (
-                    str(this_group_sorted_folder) + "_wkr" + str(iW).zfill(zfill_amount)
+                    str(this_group_sorted_folder)
+                    + "_wkr"
+                    + str(wid).zfill(zfill_amount)
                 )
                 if Path(tmp_sorted_folder).exists():
                     shutil.rmtree(tmp_sorted_folder, ignore_errors=True)
@@ -1119,27 +1168,34 @@ def main():
                 # create a new config file for each parallel job
                 this_config = deepcopy(full_config)
                 this_config["Sorting"]["sorted_folder"] = tmp_sorted_folder
-                # check for keys first
-                if "Th" in iParams[iW]:
-                    this_config["KS"]["Th_universal"] = iParams[iW]["Th"][0]
-                    this_config["KS"]["Th_learned"] = iParams[iW]["Th"][1]
-                if "spkTh" in iParams[iW]:
-                    this_config["KS"]["Th_single_ch"] = iParams[iW]["spkTh"]
-                if "n_templates" in iParams[iW]:
-                    this_config["KS"]["n_templates"] = iParams[iW]["n_templates"]
-                if "n_pcs" in iParams[iW]:
-                    this_config["KS"]["n_pcs"] = iParams[iW]["n_pcs"]
+                if full_config["Sorting"]["do_KS_param_sweep"] == 1:
+                    # overwrite keys only if parameter sweep is enabled
+                    keys = worker_params_list[wid].keys()
+                    try:
+                        for key in keys:
+                            this_config["KS"][key] = worker_params_list[wid][key]
+                    except KeyError as e:
+                        print(
+                            "Incorrect variable encountered in KS_params_to_sweep. Check the variables or ensure you're using the latest EMUsort release"
+                        )
+                        raise e
+
                 this_config["num_chans"] = preproc_recording.get_num_channels()
-                this_config["sort_type"] = "ks4" if args.ks4_reset_config else "emu"
+                this_config["sort_type"] = "ks4" if args.ks4 else "emu"
                 this_config["KS"]["nearest_chans"] = min(
                     this_config["num_chans"], this_config["KS"]["nearest_chans"]
                 )  # do not let nearest_chans exceed the number of channels
                 this_config["KS"]["nearest_templates"] = min(
                     this_config["num_chans"], this_config["KS"]["nearest_templates"]
                 )  # do not let nearest_templates exceed the number of channels
-                this_config["KS"]["torch_device"] = (
-                    "cuda:" + torch_device_ids[iW] if is_available() else "cpu"
-                )
+                if this_config["KS"]["torch_device"] == "auto":
+                    this_config["KS"]["torch_device"] = (
+                        "cuda:" + torch_device_ids[wid] if is_available() else "cpu"
+                    )
+                if this_config["KS"]["torch_device"] == "cpu":
+                    print(
+                        f"Using CPU for Kilosort. Runtimes will be MUCH slower. If trying CUDA, make sure GPU(s) can be detected."
+                    )
                 this_config["emg_chans_used"] = (
                     preproc_recording.get_channel_ids().tolist()
                 )
@@ -1149,27 +1205,26 @@ def main():
             job_list = [
                 {
                     "sorter_name": "kilosort4",
-                    "recording": recording_list[i],
-                    "output_folder": these_configs[i]["Sorting"]["sorted_folder"],
-                    **these_configs[i]["KS"],
+                    "recording": recording_list[wid],
+                    "output_folder": these_configs[wid]["Sorting"]["sorted_folder"],
+                    **these_configs[wid]["KS"],
                 }
-                for i in range(total_KS_jobs)
+                for wid in range(total_KS_jobs)
             ]
 
         # update the max resource limits to fix the "Too many open files" error during
         # asynchronous writes at the end of sorting. This change allows higher values
         # to be set for the max_concurrent_tasks value in the emu_config.yaml file
-        if platform.system() in ("Linux","Darwin"):
+        if platform.system() in ("Linux", "Darwin"):
             try:
                 import resource
+
                 # Based on SI implementation, we need 1 permitted open file per cluster, per sort
                 # 1000 should be well above the upper limit of clusters identified in each sort
                 overestimated_num_resources_needed = int(
                     round(1000 * this_config["SI"]["max_concurrent_tasks"])
                 )
-                original_resource_limits = resource.getrlimit(
-                    resource.RLIMIT_NOFILE
-                )
+                original_resource_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
                 if original_resource_limits[0] < overestimated_num_resources_needed:
                     resource.setrlimit(
                         resource.RLIMIT_NOFILE,
@@ -1178,9 +1233,7 @@ def main():
                             overestimated_num_resources_needed,
                         ),
                     )
-                    updated_resource_limits = resource.getrlimit(
-                        resource.RLIMIT_NOFILE
-                    )
+                    updated_resource_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
                     print(
                         f"Updated resource limit from {original_resource_limits[0]} to {updated_resource_limits[0]}"
                     )
