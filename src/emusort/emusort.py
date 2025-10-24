@@ -412,10 +412,12 @@ def preprocess_ephys_data(
     ]
     if bad_channel_ids is None and remove_bad_emg_chans == True:
         print("No bad channels detected.")
+        chans_to_be_used = good_channel_ids
     elif remove_bad_emg_chans == False:
         print(
             f"Bad channels detected: {bad_channel_ids}, and none were automatically removed because remove_bad_emg_chans is set to False."
         )
+        chans_to_be_used = recording_filtered.get_channel_ids()
     else:
         print("Bad channels being removed:\n" + str(bad_channel_ids))
         recording_filtered = recording_filtered.channel_slice(
@@ -423,7 +425,8 @@ def preprocess_ephys_data(
             # np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids)
             good_channel_ids
         )
-    print(f"Using channels: {good_channel_ids}")
+        chans_to_be_used = good_channel_ids
+    print(f"Using channels: {chans_to_be_used}")
     # Apply notch filter to the EMG data
     recording_notch = spre.notch_filter(
         recording_filtered, freq=60, q=30
@@ -940,27 +943,33 @@ def main():
         description="Process EMG data and perform spike sorting."
     )
     parser.add_argument(
-        "-f", "--folder", help="Path to the session folder", required=True
+        "-f",
+        "--folder",
+        help="Required parameter that provides the path to the session folder where the dataset is stored",
+        required=True,
     )
     parser.add_argument(
         "-c",
         "--config",
         action="store_true",
-        help="Generate or update the configuration file",
+        help="Edit the configuration file in the terminal window using the nano text editor",
     )
     parser.add_argument(  # ability to reset the config file
         "--reset-config",
         action="store_true",
-        help="Reset the configuration file to the default EMUsort template",
+        help="Reset the configuration file to the default template. This will either make emu_config.yaml or ks4_config.yaml depending on presence of the --ks4 flag)",
     )
     parser.add_argument(  # ability to reset the config file for KS4 default settings
         "-k",
         "--ks4",
         action="store_true",
-        help="Run EMUsort using the Kilosort4 configuration file",
+        help="Run EMUsort emulating Kilosort4 by using the ks4_config.yaml configuration file",
     )
     parser.add_argument(
-        "-s", "--sort", action="store_true", help="Perform spike sorting"
+        "-s",
+        "--sort",
+        action="store_true",
+        help="Perform spike sorting on the dataset(s) present in the session folder",
     )
 
     args = parser.parse_args()
@@ -1055,15 +1064,16 @@ def main():
                     KS_params_to_sweep = []
                 else:
                     # input verification
-                    for dct in full_config["Sorting"]["KS_params_to_sweep"]:
-                        key, val = zip(*dct.items())
+                    # for key, val in zip(full_config["Sorting"]["KS_params_to_sweep"].items())
+                    for key, val in full_config["Sorting"][
+                        "KS_params_to_sweep"
+                    ].items():
+                        # key, val = zip(*dct.items())
                         assert key in [
-                            key for key, _ in full_config["KS"]
+                            key for key, _ in full_config["KS"].items()
                         ], "Keys in KS_params_to_sweep must be a parameter in the KS section."
                         try:
                             assert isinstance(val, list)
-                            for elem in val:
-                                assert isinstance(elem, list)
                         except AssertionError as e:
                             raise AssertionError(
                                 "Elements of KS_params_to_sweep must be key-value pairs, where values are lists"
@@ -1072,6 +1082,7 @@ def main():
                     KS_params_to_sweep = deepcopy(
                         full_config["Sorting"]["KS_params_to_sweep"]
                     )
+                    # keep track of original key order before separating out the grouped parameters
                     KS_params_to_sweep_orig_keys = list(KS_params_to_sweep.keys())
 
                 if full_config["Sorting"]["grouped_params_for_sweep"] is None:

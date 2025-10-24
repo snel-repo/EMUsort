@@ -63,7 +63,7 @@ Group:
 KS:
     remove_chan_delays: false # EMUsort setting, will apply channel delays to align MUAPs based on correlation maximization
     remove_spike_outliers: false # EMUsort setting, will use HDBSCAN to remove outlier isolated spikes during initialization
-    hdbscan_min_cluster_size: # EMUsort setting, controls the minimum number of points needed to count as a cluster during HDBSCAN spike outlier removal. See sklearn HDBSCAN docs regarding the min_cluster_size parameter for more info.
+    hdbscan_min_cluster_size: 20 # EMUsort setting, controls the minimum number of points needed to count as a cluster during HDBSCAN spike outlier removal. See sklearn HDBSCAN docs regarding the min_cluster_size parameter for more info.
     batch_size: 60000
     nblocks: 0
     Th_single_ch: [6]
@@ -96,7 +96,6 @@ KS:
     keep_good_only: false
     save_extra_kwargs: false
     skip_kilosort_preprocessing: false
-    scaleproc:
     torch_device: auto # Used to select the torch device for spike sorting. Can be "auto"/"cuda"/"cpu". Use "auto" if do_KS_param_sweep is True
 
 # SpikeInterface parameters
