@@ -1,18 +1,18 @@
 ---
 ## EMUsort configuration file
 
-# Dataset parameters
+# Dataset Parameters
 # provide information specific to the dataset you want to sort
 Data:
     dataset_type: 'openephys' # can be 'openephys', 'nwb', 'blackrock', 'intan' or 'binary'
     # below two settings are only used when 'openephys' dataset_type is chosen
-    openephys_experiment_id: 0 # for openephys recordings with several experiment per session, index of the experiment to use (corresponds to "block_index" in spikeinterface)
-    openephys_stream_id: 0 # for openephys recordings with several streams, index of the stream to use
+    openephys_experiment_id: 0 # for openephys recordings with several experiment per session, zero indexing of the experiment to use (corresponds to "block_index" in spikeinterface)
+    openephys_stream_id: 0 # for openephys recordings with several streams, zero indexing of the stream to use
     # below three settings are only used when 'binary' dataset_type is chosen
     binary_sampling_rate: # sampling rate of the emg data in binary file(s)
     binary_num_channels: # number of channels in the recording in binary file(s)
     binary_dtype: 'int16' # data type of the emg data in binary file(s)
-    emg_recordings: [0] # index of each recording (index into file names of matching dataset_type in the session folder, sorted alphanumerically)
+    emg_recordings: [0] # index of each recording (zero indexing into file names of matching dataset_type in the session folder, sorted alphanumerically)
     # if multiple emg_recordings are chosen, they will be concatenated prior to sorting (can be [all] or a list of integers, e.g., [0,1,2,5,6])
     emg_passband: # low and high passband frequencies for emg data, in Hz
         - 250
@@ -21,33 +21,35 @@ Data:
         - 0
         - 0
 
-# Sorting parameters
+# Sorting Parameters
 Sorting:
     output_folder: # if left blank, will output into the path provided by the session_folder argument
     GPU_to_use: [0] # GPU to use for kilosort, (a list of integers, e.g., [0,1,2,5,6])
     num_KS_jobs: 1 # number of Kilosort jobs to be distributed across all chosen GPUs (will run parallel jobs if >1)
-    # setting num_KS_jobs > 1 can only be used when do_KS_param_gridsearch is true
-    # but do_KS_param_gridsearch can be true when num_KS_jobs = 1
-    do_KS_param_gridsearch: false # set to true to run multiple sorting jobs with different parameters
-    # when do_KS_param_gridsearch is false, only the first rows of each gridsearch_KS_params are used (defaults)
-    gridsearch_KS_params: #  
-        Th: # in format [Th_universal, Th_learned] for each element
-            - [9, 8] # default setting for EMUsort
-            - [10, 4]
-            - [7, 3]
-            - [5, 2]
-            - [2, 1]
-        spkTh: # Th_single_ch (STDs), EMUsort allows aggregation of multiple thresholds
+    # If do_KS_param_sweep is True when num_KS_jobs = 1, it will perform the parameter sweep sequentially
+    # If setting num_KS_jobs > 1, do_KS_param_sweep must be True
+    do_KS_param_sweep: false # set to true to run multiple sorting jobs with different parameters. If true, the chosen parameters from the KS section will be overwritten 
+    KS_params_to_sweep: # dictionary of Kilosort parameters to sweep, where each value must be a list, and each key must be a parameter in the KS section
+        Th_universal: [9,10,7,5,2] # list of floats
+        Th_learned: [8,4,3,2,1] # list of floats
+        Th_single_ch: # list of lists of floats in units of STDs, EMUsort allows aggregation of multiple thresholds
             - [6, 9, 12, 15] # default setting for EMUsort
             - [6, 9, 12]
             - [3, 6, 9]
             - [6, 9]
             - [6]
+    grouped_params_for_sweep: # list of lists of strings (parameter keys)
+        # some parameters should be grouped to avoid bad combinations and reduce overall run count
+        # each index of the parameter values are grouped as a single variable
+        # for example, the first values of each key in a group are all taken together, and will not be combined with other indexes
+        # leave blank to disable
+            - [Th_universal,Th_learned]
 
-# Group-specific parameters
-# channel groups are sorted separately (used for single muscles), rows of each parameter define settings for each group
+# Channel Group Parameters
+# channel groups are sorted individually (useful for separating sorting for multiple muscles),
+# number of entries (rows) of each parameter define settings for each group
 Group:
-    emg_chan_list: # Which channels to sort, zero-indexed (can be [all] or a list of integers, e.g., [0,1,2,5,6])
+    emg_chan_list: # Which channels to sort, with zero indexing (can be [all] or a list of integers, e.g., [0,1,2,5,6])
         - [all] # default setting to include all channels
         #- [0,1,2,3,4,5,6,7] # this row defines channels to use for the second group
         #- [8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31] # third group
@@ -59,10 +61,14 @@ Group:
 # Kilosort parameters
 # nearest_chans and torch_device may be modified in emusort.py to avoid errors
 KS:
-    remove_chan_delays: true # EMUsort setting, will apply channel delays to optimally align MUAPs
+    remove_chan_delays: true # EMUsort setting, will apply channel delays to align MUAPs based on correlation maximization
     remove_spike_outliers: true # EMUsort setting, will use HDBSCAN to remove outlier isolated spikes during initialization
+    hdbscan_min_cluster_size: 20 # EMUsort setting, controls the minimum number of points needed to count as a cluster during HDBSCAN spike outlier removal. See sklearn HDBSCAN docs regarding the min_cluster_size parameter for more info.
     batch_size: 60000
     nblocks: 0
+    Th_single_ch: [6, 9, 12, 15]
+    Th_universal: 9
+    Th_learned: 8
     do_CAR: false
     invert_sign: false
     nt: 61
@@ -90,10 +96,9 @@ KS:
     keep_good_only: false
     save_extra_kwargs: false
     skip_kilosort_preprocessing: false
-    scaleproc:
-    torch_device: auto
+    torch_device: auto # Used to select the torch device for spike sorting. Can be "auto"/"cuda"/"cpu". Use "auto" if do_KS_param_sweep is True
 
 # SpikeInterface parameters
 SI:
     chunk_duration: '20s' # Chunk duration in seconds if float or with units if str (e.g. '1s', '500ms')
-    max_concurrent_tasks: 5 # number of I/O tasks to run in parallel (faster, but too high can produce "Too many open files" error)
+    max_concurrent_tasks: 5 # batch size of tasks to perform asynchronous disk reads/writes. Higher is generally faster, with the limit at the number of parameter sweep combinations, but lower can be more stable.
