@@ -35,17 +35,17 @@ After cloning is complete, you will need to configure a uv, micromamba, or conda
 
 ### Pulling Updates from GitHub
 
-If your cloned repo ever becomes out of date, you should likely pull updates from the main repo. To do so, navigate into the `EMUsort` folder and run:
+To update your `EMUsort` clone to the latest version, you can pull updates from the main repository. To do so, navigate into the folder where `EMUsort` was cloned and run:
 
     git pull && git submodule update
 
 If you are updating and already previously installed EMUsort, you may encounter issues with the configuration file (if it's structure changed). If this happens, you can reset it to the default configuration file by running:
 
-    emusort --folder /path/to/session_folder --reset-config
+    emusort --reset-config --folder /path/to/session_folder
 
 ### Python Environment Creation
 
-Before following the below steps, make sure to navigate into the `EMUsort` folder where you cloned the repo.
+Before following the below steps, make sure to navigate into the folder where `EMUsort` was cloned.
 
 #### Option 1: [`uv`](https://docs.astral.sh/uv/)
 **Recommended for Windows and Linux (see Option 2 if using Linux over RDP)**
@@ -114,15 +114,21 @@ Make sure restart the terminal or [initialize](https://www.anaconda.com/docs/get
 
 Every time you open a new terminal, the environment must be activated, whether manually or automatically (see [Advanced Usage](https://github.com/snel-repo/EMUsort?tab=readme-ov-file#advanced-usage) for automatic activation).
 
-**uv:**  
-- Linux: `source /path/to/repo_folder/.venv/bin/activate`  
-- Windows: `source /path/to/repo_folder/.venv/Scripts/activate`  
+#### Option 1: `uv`
 
-**micromamba:**
+*Linux only:*
+
+    source /path/to/repo_folder/.venv/bin/activate
+
+*Windows only*:
+
+    source /path/to/repo_folder/.venv/Scripts/activate
+
+#### Option 2: `micromamba`
 
     micromamba activate emusort
 
-**anaconda:**
+#### Option 3: `anaconda/miniconda`
 
     conda activate emusort
 
@@ -142,7 +148,7 @@ Items #2-4, will be generated automatically inside the provided session folder.
    - Binary recording files
    - Record Node ### (if using OpenEphys session folder)
 2. `emu_config.yaml` file
-   - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command-line option. Within the config file, please note that you will have to change the `dataset_type` attribute to match your desired dataset type. Once you generate the default config template, please review it and utilize the comments as documentation to guide your actions
+   - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command line option. Within the config file, please note that you will have to change the `dataset_type` attribute to match your desired dataset type. Once you generate the default config template, please review it and utilize the comments as documentation to guide your actions
 3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_Th#_spkTh#` folders (tagged with datetime stamp, group ID, session folder name, and parameters used)
    - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']`). The corresponding channel indexes for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` is also dumped for future reference, which also includes channel indexes used in each sort as `emg_chans_used`.
 4. `concatenated_data` folder
@@ -164,39 +170,49 @@ To show a helpful summary of EMUsort commands:
 
     emusort --help
 
-To simply generate a config file (if it doesn't exist), navigate into the `EMUsort` repo folder and run (absolute/relative paths are both acceptable):
+To simply generate a config file (if it doesn't exist), run the below command:  
+
+>**Note:** Absolute and relative paths are both acceptable.
 
     emusort --folder /path/to/session_folder
 
-Editing the main configuration file can be done by running the command below (will be generated if it doesn't exist):
+Editing the main configuration file, `emu_config.py`, can be done by running the command below (will be generated from `configs/config_template_emu.yaml` if it doesn't exist):
 
-    emusort --folder /path/to/session_folder --config
+    emusort --config --folder /path/to/session_folder
 
-To run a sort on the dataset(s) in the session folder, run:
+If a problem occurs with your `emu_config.py` file and you would like to reset it to the default at `configs/config_template_emu.yaml`, you can run:
 
-    emusort --folder /path/to/session_folder --sort
+    emusort --reset-config --folder /path/to/session_folder
 
-If a problem occurs with your `emu_config.py` file and you would like to reset to the default, run:
+To run a sort directly with the current `emu_config.py` on the dataset(s) in the session folder, run:
 
-    emusort --folder /path/to/session_folder --reset-config
+    emusort --sort --folder /path/to/session_folder
 
-To perform multiple operations in sequence, you can append any combination of the below commands to the command-line after `emusort`
+For Kilosort4 emulation runs, you can include the `--ks4` flag. See [Running EMUsort As If Default Kilosort4](https://github.com/snel-repo/EMUsort?tab=readme-ov-file#running-emusort-as-if-default-kilosort4-v4011) for more details.
 
-    --folder, -f
+
+If you want to specify multiple settings at the same time, you can append any combination of the below commands to the command line after `emusort`.
+
+>**Note:** For all commands, there is a short-form equivalent. The flags can be used in any order, but the path must always follow directly after the `--folder` flag.
+
+    --help, -h
+    --folder /path/to/session_folder, -f ./session_folder
     --config, -c
-    --sort, -s
     --reset-config, --r
-    --ks4-reset-config, --k
+    --sort, -s
+    --ks4, -k
 
-For example, if you want to reset to default config, configure it, and then spike sort immediately, you can run all commands at once with: `emusort -f /path/to/session_folder -cs --r` or simply `emusort --r -csf .` if you are already in the session folder. The flags can be in any order, but the path must always follow directly after the `-f` flag.
+As an example of using multiple commands, if you want to reset to the default configuration file, edit the new `emu_config.yaml`, and also spike sort immediately after saving, you can run the below:
+
+    emusort --reset-config --config --sort --folder /path/to/session_folder
 
 ### Inspecting and Curating with `phy`
 
-To view and analyze the latest sort with Phy GUI, navigate into the `sorted_###` folder, and run:
+To view and analyze the latest sort with Phy GUI, you can either copy and paste the suggested `phy` command in the terminal output, or navigate into the latest `sorted_###` folder, and execute:
 
     phy template-gui params.py
 
-For more information on `phy`, see documentation at the main repo: [https://phy.readthedocs.io/en/latest/]([url](https://phy.readthedocs.io/en/latest/))
+For more information on `phy`, see the documentation at the main GitHub repository: [https://phy.readthedocs.io/en/latest/]([url](https://phy.readthedocs.io/en/latest/))
 
 ## Advanced Usage
 
@@ -204,7 +220,7 @@ For more information on `phy`, see documentation at the main repo: [https://phy.
 
 To automatically activate the environment each time you open a new terminal, append to the end of your `~/.bashrc` file the activation command, depending on which environment manager you are using, execute:
 
->**Windows only**: If using GitBash (recommended), you may need to replace `~/.bashrc` with `~/.bash_profile` in the below commands. For `uv`, you must also swap to `source /path/to/repo_folder/.venv/Scripts/activate`.
+>**Windows only**: If using GitBash (recommended), you may need to replace `~/.bashrc` with `~/.bash_profile` in the below commands. For `uv`, you must also swap to `"source /path/to/repo_folder/.venv/Scripts/activate"`.
 
 **uv:** 
     
@@ -220,17 +236,31 @@ To automatically activate the environment each time you open a new terminal, app
 
 ### Parameter Sweep Over Multiple Kilosort Parameters to Produce Many Sorts in Parallel
 
-If you want to run multiple sort jobs in parallel across a range of KS parameters, edit `emu_config.py` under the `Sorting` section and set the `do_KS_param_gridsearch` field to `true`. Above it, modify `GPU_to_use` to include all the GPUs that should be used. Modify `num_KS_jobs` to specify how many total jobs to distribute across all chosen GPUs.
+If you want to run multiple sort jobs in parallel across a range of KS parameters, edit `emu_config.py` under the `Sorting` section and set the `do_KS_param_sweep` field to `true`. Above it, modify `GPU_to_use` to include all the GPUs that should be used. Modify `num_KS_jobs` to specify how many total jobs to distribute across all chosen GPUs.
 
 Be aware of the combinatorics so you don't generate more sorts than you expected (e.g., NxM combinations for N of param1 and M of param2).
 
 ### Running EMUsort As If Default Kilosort4 (v4.0.11)
 
-In order to run EMUsort exactly like a default Kilosort4 (v4.0.11) installation for comparison of performance, you can use `emusort --k -csf .` or the below command:
+In order to run EMUsort exactly like a default Kilosort4 (v4.0.11) installation for comparison of performance, you can use the short-form command `emusort -kcsf .` to run it in the current folder, or use the below, longer-form command:
 
-    emusort --folder /path/to/session_folder --ks4-reset-config --config --sort
+    emusort --ks4 --config --sort --folder /path/to/session_folder
 
-This will generate a default ks4 config file and run the sort with it. It does not interfere with the main `emu_config.yaml` file because it is a separate config file named `ks4_config.yaml`. This is useful for comparing the performance of EMUsort vs. Kilosort4.
+This will generate a default Kilosort4 config file and run the sort with it. It does not interfere with the main `emu_config.yaml` file because it is a separate config file named `ks4_config.yaml`. 
+
+To only adjust the `ks4_config.py` in the session folder without performing spike sorting, you can run:
+    
+    emusort --ks4 --config --folder /path/to/session_folder
+
+To reset the `ks4_config.py` file to default from `configs/config_template_ks4.yaml` and edit it, run:
+
+    emusort --reset-config --ks4 --config --folder /path/to/session_folder
+
+To run Kilosort4 emulation, reset `ks4_config.yaml` to default settings, edit the new `ks4_config.yaml`, and perform spike sorting in the current folder, all in one compact command, you can run the below command:
+
+    emusort --r -kcsf .
+
+This emulation capability is useful for comparing the performance of EMUsort vs. Kilosort4.
 
 ## Final Notes
 

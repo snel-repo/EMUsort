@@ -32,8 +32,8 @@ Sorting:
     KS_params_to_sweep: # dictionary of Kilosort parameters to sweep, where each value must be a list, and each key must be a parameter in the KS section
         Th_universal: [9,10,7,5,2] # list of floats
         Th_learned: [8,4,3,2,1] # list of floats
-        Th_single_ch: # list of lists of floats in units of STDs, EMUsort allows aggregation of multiple thresholds
-            - [6, 9, 12, 15] # default setting for EMUsort
+        Th_single_ch: # list of lists of floats in units of STDs, EMUsort allows aggregation of multiple thresholds, Kilosort4 only uses single thresholds
+            - [6, 9, 12, 15]
             - [6, 9, 12]
             - [3, 6, 9]
             - [6, 9]
@@ -46,7 +46,9 @@ Sorting:
             - [Th_universal,Th_learned]
 
 # Channel Group Parameters
-# channel groups are sorted individually (useful for separating sorting for multiple muscles),
+# channel groups are sorted individually and sequentially
+# if combined with the parameter sweep, the sweep will be performed on each channel group
+# useful for separating sorting for recordings from different muscles or multiple separately implanted threads
 # number of entries (rows) of each parameter define settings for each group
 Group:
     emg_chan_list: # Which channels to sort, with zero indexing (can be [all] or a list of integers, e.g., [0,1,2,5,6])
@@ -100,5 +102,5 @@ KS:
 
 # SpikeInterface parameters
 SI:
-    chunk_duration: '20s' # Chunk duration in seconds if float or with units if str (e.g. '1s', '500ms')
-    max_concurrent_tasks: 5 # batch size of tasks to perform asynchronous disk reads/writes. Higher is generally faster, with the limit at the number of parameter sweep combinations, but lower can be more stable.
+    chunk_duration: '20s' # Chunk duration in seconds if float or with units if str (e.g. '20s', '500ms')
+    max_concurrent_tasks: 5 # batch size to perform asynchronous disk reads/writes. Higher is generally faster, with the limit at the number of parameter sweep combinations, but lower can be more stable.

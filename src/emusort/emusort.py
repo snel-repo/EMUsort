@@ -959,17 +959,17 @@ def main():
         action="store_true",
         help="Reset the configuration file to the default template. This will either make emu_config.yaml or ks4_config.yaml depending on presence of the --ks4 flag)",
     )
-    parser.add_argument(  # ability to reset the config file for KS4 default settings
-        "-k",
-        "--ks4",
-        action="store_true",
-        help="Run EMUsort emulating Kilosort4 by using the ks4_config.yaml configuration file",
-    )
     parser.add_argument(
         "-s",
         "--sort",
         action="store_true",
         help="Perform spike sorting on the dataset(s) present in the session folder",
+    )
+    parser.add_argument(  # ability to reset the config file for KS4 default settings
+        "-k",
+        "--ks4",
+        action="store_true",
+        help="Run EMUsort emulating Kilosort4 by using the ks4_config.yaml configuration file",
     )
 
     args = parser.parse_args()
