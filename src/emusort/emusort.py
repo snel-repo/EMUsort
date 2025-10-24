@@ -824,7 +824,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         name = name.replace("_g0", "")
 
     # remove unwanted chars and trailing commas/underscores
-    name = "".join(ch for ch in name if ch not in " ()[]").rstrip(",_")
+    name = "".join(char for char in name if char not in " ()[]").rstrip(",_")
 
     # append score and optional tag
     name = f"{name}_SCORE_{emusort_score:.3f}"
@@ -838,7 +838,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     dump_yaml(final_path / "emu_config.yaml", this_config)
     np.save(final_path / "emg_chans_used.npy", this_config["emg_chans_used"])
 
-    phy_msg = f"\nTo view Worker {wid} result in Phy, run:\nphy template-gui {final_path / 'params.py'}\n"
+    phy_msg = f"\nTo view Worker {wid} result in Phy, run:\nphy template-gui {(final_path / 'params.py').as_posix()}\n"
 
     return [report, phy_msg]
 
