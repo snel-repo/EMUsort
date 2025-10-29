@@ -176,15 +176,15 @@ To simply generate a config file (if it doesn't exist), run the below command:
 
     emusort --folder /path/to/session_folder
 
-Editing the main configuration file, `emu_config.py`, can be done by running the command below (will be generated from `configs/config_template_emu.yaml` if it doesn't exist):
+Editing the main configuration file, `emu_config.yaml`, can be done by running the command below (will be generated from `configs/config_template_emu.yaml` if it doesn't exist):
 
     emusort --config --folder /path/to/session_folder
 
-If a problem occurs with your `emu_config.py` file and you would like to reset it to the default at `configs/config_template_emu.yaml`, you can run:
+If a problem occurs with your `emu_config.yaml` file and you would like to reset it to the default at `configs/config_template_emu.yaml`, you can run:
 
     emusort --reset-config --folder /path/to/session_folder
 
-To run a sort directly with the current `emu_config.py` on the dataset(s) in the session folder, run:
+To run a sort directly with the current `emu_config.yaml` on the dataset(s) in the session folder, run:
 
     emusort --sort --folder /path/to/session_folder
 
@@ -234,11 +234,19 @@ To automatically activate the environment each time you open a new terminal, app
     
     echo "conda activate emusort" >> ~/.bashrc # USING YOUR VALID PATH
 
-### Parameter Sweep Over Multiple Kilosort Parameters to Produce Many Sorts in Parallel
+### Parameter Sweep Over Multiple Kilosort Parameters to Help Find the Best Settings for Your Dataset
 
-If you want to run multiple sort jobs in parallel across a range of KS parameters, edit `emu_config.py` under the `Sorting` section and set the `do_KS_param_sweep` field to `true`. Above it, modify `GPU_to_use` to include all the GPUs that should be used. Modify `num_KS_jobs` to specify how many total jobs to distribute across all chosen GPUs.
+EMUsort can now perform parameter sweeps across all parameters under the `KS` section of the configuration file.
 
-Be aware of the combinatorics so you don't generate more sorts than you expected (e.g., NxM combinations for N of param1 and M of param2).
+If you want to explore multiple parameters and find the best parameter combinations for your dataset, you can edit the `emu_config.yaml` file under the `Sorting` section to enable a parameter sweep. Decide which GPUs you want to use during processing. This is usually determined by how much memory each GPU has, and how many sorting processes can fit on a single GPU. You can test empirically to see what arrangement of job loads runs fastest on your system.
+
+First, modify the `GPU_to_use` list to include the indexes of the GPU(s) that should be used. Next, modify `num_KS_jobs` to specify how many total jobs to distribute evenly across all chosen GPUs. This `num_KS_jobs` parameter determines how many jobs will be running in parallel, so if you set `num_KS_jobs: 1`, any parameter combinations to be tried will be run sequentially on the first GPU specified in the `GPU_to_use` list. 
+
+>For example, if you set `GPU_to_use: [0,1]` and `num_KS_jobs: 1`, the jobs would be run one after the other on GPU 0, but if you instead set `num_KS_jobs: 10`, this would allow up to 5 sort jobs to be run on each of GPU 0 and GPU 1.
+
+In order to activate the parameter sweep, you must set the `do_KS_param_sweep` field to `true`. However, if `do_KS_param_sweep` is `false`, then `num_KS_jobs` must be `1` to reflect that only 1 process will be performed. Next, the `KS_params_to_sweep` field controls which parameters are going to be explored during the parameter sweep. Each field under `KS_params_to_sweep` must be a Kilosort parameter as listed under the `KS` section. The values corresponding to each Kilosort parameter under `KS_params_to_sweep` must be a list, which will be iterated across during the sweep.
+
+The `grouped_params_for_sweep` parameter controls how the sweep combinations are exlored. If no groupings are specified (e.g., if `grouped_params_for_sweep` is left blank), the Kilosort parameter combinations will explored in full, so that the product of the number of elements in each Kilosort parameter list is the total number of combinations. In this case, beware of the combinatorics so you don't generate more sorts than you expected (e.g., NxM combinations for N of param1 and M of param2). For more explicit control of the parameters, you can specify lists of parameter groups where each element is a list of parameter keys, such as `grouped_params_for_sweep: [[Th_universal, Th_learned]]` for a single group, or `grouped_params_for_sweep: [[Th_universal, Th_learned], [nt, nt0min]]` for two groups. When groups are specified, their parameters are linked so that the first element of each parameter is linked with the first element of all other parameters in the group, the second elements of each parameter in the group are linked, and so on. This means each Kilosort parameter list in a group must be equal length. This `grouped_params_for_sweep` parameter allows explicit control of some Kilosort parameter combinations to avoid bad combinations and reduce the overall number of runs to be performed. To determine the number of total combinations for a given sweep when using parameter groupings, you must treat each group as a single parameter in the combinatorics multiplication. For example, the default configuration file specifies 5 settings each for `Th_universal`, `Th_learned`, and `Th_single_ch`. It also specifies a single grouping with: `grouped_params_for_sweep: [[Th_universal, Th_learned]]`. Because the group is treated as a single parameter in the combinatorics multiplication, the number of combinations will be 5*5=25.
 
 ### Running EMUsort As If Default Kilosort4 (v4.0.11)
 
@@ -248,11 +256,11 @@ In order to run EMUsort exactly like a default Kilosort4 (v4.0.11) installation 
 
 This will generate a default Kilosort4 config file and run the sort with it. It does not interfere with the main `emu_config.yaml` file because it is a separate config file named `ks4_config.yaml`. 
 
-To only adjust the `ks4_config.py` in the session folder without performing spike sorting, you can run:
+To only adjust the `ks4_config.yaml` in the session folder without performing spike sorting, you can run:
     
     emusort --ks4 --config --folder /path/to/session_folder
 
-To reset the `ks4_config.py` file to default from `configs/config_template_ks4.yaml` and edit it, run:
+To reset the `ks4_config.yaml` file to default from `configs/config_template_ks4.yaml` and edit it, run:
 
     emusort --reset-config --ks4 --config --folder /path/to/session_folder
 

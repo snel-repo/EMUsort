@@ -835,7 +835,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
 
     # move and save
     shutil.move(sorted_folder, final_path)
-    dump_yaml(final_path / "emu_config.yaml", this_config)
+    dump_yaml(final_path / f'{this_config["sort_type"]}_config.yaml', this_config)
     np.save(final_path / "emg_chans_used.npy", this_config["emg_chans_used"])
 
     phy_msg = f"\nTo view Worker {wid} result in Phy, run:\nphy template-gui {(final_path / 'params.py').as_posix()}\n"
