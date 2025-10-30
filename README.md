@@ -56,7 +56,7 @@ Follow the steps and execute the commands below to install and manage EMUsort wi
 
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
-Then either restart the terminal or execute the command suggested in the terminal to enable using `uv` in the terminal. Next, create the environment and install all dependendencies including Phy, using `uv`:
+Then either restart the terminal or execute the command suggested in the terminal to enable using `uv` in the terminal. Next, create the environment and install all dependencies including Phy, using `uv`:
 
     cd /path/to/repo_folder # go into the EMUsort clone location  
 >**Windows only:** Windows seems most stable using Python version 3.9, so be sure to use the `--python 3.9` option with the below command.
@@ -148,9 +148,9 @@ Items #2-4, will be generated automatically inside the provided session folder.
    - Binary recording files
    - Record Node ### (if using OpenEphys session folder)
 2. `emu_config.yaml` file
-   - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command line option. Within the config file, please note that you will have to change the `dataset_type` attribute to match your desired dataset type. Once you generate the default config template, please review it and utilize the comments as documentation to guide your actions
-3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_Th#_spkTh#` folders (tagged with datetime stamp, group ID, session folder name, and parameters used)
-   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']`). The corresponding channel indexes for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` is also dumped for future reference, which also includes channel indexes used in each sort as `emg_chans_used`.
+   - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command line option. Within the configuration file, please note that you will have to change the `dataset_type` attribute to match your desired dataset type. Once you generate the default config template, please review it and utilize the comments as documentation to guide your actions
+3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_P1_#_P2_#...` folders, which are tagged with a datetime stamp, a channel group ID (if used), session folder name, and parameters used in a sweep in the same order as they appear under `KS_params_to_sweep` (if used)
+   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']` and which channel was used as the reference for applying the delays under `ops['preprocessing']['reference_chan']`, which can be used as an index into `ops['preprocessing']['chan_delays']` or `emg_chans_used`). The corresponding channel indexes for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` is also dumped for future reference, which also includes channel indexes used in each sort as `emg_chans_used`.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
 
@@ -170,7 +170,7 @@ To show a helpful summary of EMUsort commands:
 
     emusort --help
 
-To simply generate a config file (if it doesn't exist), run the below command:  
+To simply generate a configuration file (if it doesn't exist), run the below command:  
 
 >**Note:** Absolute and relative paths are both acceptable.
 
@@ -248,7 +248,7 @@ To set the selected GPU(s), modify the `GPU_to_use` list to include the indexes 
 #### Managing Parameter Combinations and Executing a Parameter Sweep
 In order to activate the parameter sweep, you must set the `do_KS_param_sweep` field to `true`. However, if `do_KS_param_sweep` is `false`, then `num_KS_jobs` must be `1` to reflect that only 1 sort job will be performed. Next, the `KS_params_to_sweep` field controls which parameters are going to be explored during the parameter sweep. Each field under `KS_params_to_sweep` must be a Kilosort parameter as listed under the `KS` section. The values corresponding to each Kilosort parameter under `KS_params_to_sweep` must be a list, which will be iterated across during the sweep.
 
-The `grouped_params_for_sweep` parameter controls how the sweep combinations are exlored. If no groupings are specified (e.g., if `grouped_params_for_sweep` is left blank), the Kilosort parameter combinations will explored in full, so that the product of the number of elements in each Kilosort parameter list is the total number of combinations. In this case, beware of the combinatorics so you don't generate more sorts than you expected (e.g., NxM combinations for N of param1 and M of param2). For more explicit control of the parameters, you can specify lists of parameter groups where each element is a list of parameter keys, such as `grouped_params_for_sweep: [[Th_universal, Th_learned]]` for a single group, or `grouped_params_for_sweep: [[Th_universal, Th_learned], [nt, nt0min]]` for two groups. When groups are specified, their parameters are linked so that the first element of each parameter is linked with the first element of all other parameters in the group, the second elements of each parameter in the group are linked, and so on. This means each Kilosort parameter list in a group must be equal length. This `grouped_params_for_sweep` parameter allows explicit control of some Kilosort parameter combinations to avoid bad combinations and reduce the overall number of runs to be performed. To determine the number of total combinations for a given sweep when using parameter groupings, you must treat each group as a single parameter in the combinatorics multiplication. For example, the default configuration file specifies 5 settings each for `Th_universal`, `Th_learned`, and `Th_single_ch`. It also specifies a single grouping with: `grouped_params_for_sweep: [[Th_universal, Th_learned]]`. Because the group is treated as a single parameter in the combinatorics multiplication, the number of combinations will be 5*5=25.
+The `grouped_params_for_sweep` parameter controls how the sweep combinations are explored. If no groupings are specified (e.g., if `grouped_params_for_sweep` is left blank), the Kilosort parameter combinations will explored in full, so that the product of the number of elements in each Kilosort parameter list is the total number of combinations. In this case, beware of the combinatorics so you don't generate more sorts than you expected (e.g., NxM combinations for N of param1 and M of param2). For more explicit control of the parameters, you can specify lists of parameter groups where each element is a list of parameter keys, such as `grouped_params_for_sweep: [[Th_universal, Th_learned]]` for a single group, or `grouped_params_for_sweep: [[Th_universal, Th_learned], [nt, nt0min]]` for two groups. When groups are specified, their parameters are linked so that the first element of each parameter is linked with the first element of all other parameters in the group, the second elements of each parameter in the group are linked, and so on. This means each Kilosort parameter list in a group must be equal length. This `grouped_params_for_sweep` parameter allows explicit control of some Kilosort parameter combinations to avoid bad combinations and reduce the overall number of runs to be performed. To determine the number of total combinations for a given sweep when using parameter groupings, you must treat each group as a single parameter in the combinatorics multiplication. For example, the default configuration file specifies 5 settings each for `Th_universal`, `Th_learned`, and `Th_single_ch`. It also specifies a single grouping with: `grouped_params_for_sweep: [[Th_universal, Th_learned]]`. Because the group is treated as a single parameter in the combinatorics multiplication, the number of combinations will be 5*5=25.
 
 ### Running EMUsort As If Default Kilosort4 (v4.0.11)
 
@@ -256,7 +256,7 @@ In order to run EMUsort exactly like a default Kilosort4 (v4.0.11) installation 
 
     emusort --ks4 --config --sort --folder /path/to/session_folder
 
-This will generate a default Kilosort4 config file and run the sort with it. It does not interfere with the main `emu_config.yaml` file because it is a separate config file named `ks4_config.yaml`. 
+This will generate a default Kilosort4 configuration file and run the sort with it. It does not interfere with the main `emu_config.yaml` file because it is a separate configuration file named `ks4_config.yaml`. 
 
 To only adjust the `ks4_config.yaml` in the session folder without performing spike sorting, you can run:
     
