@@ -38,11 +38,13 @@ Sorting:
             - [9]
             - [12]
             - [15]
-    grouped_params_for_sweep: # list of lists of strings (parameter keys)
-        # some parameters should be grouped to avoid bad combinations and reduce overall run count
-        # each index of the parameter values are grouped as a single variable
-        # for example, the first values of each key in a group are all taken together, and will not be combined with other indexes
-        # leave blank to disable
+    linked_params_for_sweep: # list of lists of strings (parameter keys from KS section)
+        # some parameters should be linked to avoid bad combinations and reduce overall run count
+        # for linked parameters, only matching indexes will be taken as a valid combination
+        # combinations of different indexes for linked parameters will not tried
+        # so, the first indexes of each linked parameter will be used as a combination, then all the second indexes and so on
+        # this allows explicit combinations to be set for linked parameters
+        # leave it blank to disable
             - [Th_universal,Th_learned]
 
 # Channel Group Parameters

@@ -1060,54 +1060,70 @@ def main():
             if full_config["Sorting"]["do_KS_param_sweep"] == 0:
                 total_KS_jobs = 1
             else:
-                if full_config["Sorting"]["KS_params_to_sweep"] is None:
-                    KS_params_to_sweep = []
-                else:
-                    # input verification
-                    # for key, val in zip(full_config["Sorting"]["KS_params_to_sweep"].items())
-                    for key, val in full_config["Sorting"][
-                        "KS_params_to_sweep"
-                    ].items():
-                        # key, val = zip(*dct.items())
-                        assert key in [
-                            key for key, _ in full_config["KS"].items()
-                        ], "Keys in KS_params_to_sweep must be a parameter in the KS section."
-                        try:
-                            assert isinstance(val, list)
-                        except AssertionError as e:
-                            raise AssertionError(
-                                "Elements of KS_params_to_sweep must be key-value pairs, where values are lists"
-                            ) from e
-                    # passed verification
-                    KS_params_to_sweep = deepcopy(
-                        full_config["Sorting"]["KS_params_to_sweep"]
-                    )
-                    # keep track of original key order before separating out the grouped parameters
-                    KS_params_to_sweep_orig_keys = list(KS_params_to_sweep.keys())
+                # input verification
+                assert (
+                    full_config["Sorting"]["KS_params_to_sweep"] is not None
+                ), "You must provide at least 1 parameter under KS_params_to_sweep if do_KS_param_sweep is True"
 
-                if full_config["Sorting"]["grouped_params_for_sweep"] is None:
-                    grouped_param_groups_list = []
+                for key, val in full_config["Sorting"]["KS_params_to_sweep"].items():
+                    try:
+                        assert key in [
+                            k for k, _ in full_config["KS"].items()
+                        ], f"Keys in KS_params_to_sweep must be a parameter in the KS section, but {str(key)} was not found"
+                        assert isinstance(
+                            val, list
+                        ), f"The values of each key in KS_params_to_sweep must be a list, but the value for {str(key)} was type {type(val)}. Try adding brackets"
+                    except AssertionError as e:
+                        raise AssertionError(
+                            "Elements of KS_params_to_sweep must be key-value pairs, with valid keys from the KS section and a list of values for each key."
+                        ) from e
+                # passed verification
+                KS_params_to_sweep = deepcopy(
+                    full_config["Sorting"]["KS_params_to_sweep"]
+                )
+                # keep track of original key order before separating out the linked parameters
+                KS_params_to_sweep_orig_keys = list(KS_params_to_sweep.keys())
+
+                if full_config["Sorting"]["linked_params_for_sweep"] is None:
+                    linked_param_groups_list = []
                 else:
                     # input verification
                     try:
-                        for lst in full_config["Sorting"]["grouped_params_for_sweep"]:
+                        for lst in full_config["Sorting"]["linked_params_for_sweep"]:
                             assert isinstance(lst, list)
-                            for key in lst:
-                                assert isinstance(key, str)
+                            for kid, key in enumerate(lst):
+                                assert isinstance(
+                                    key, str
+                                ), f"Elements in each list of linked_params_for_sweep must be strings, but {str(key)} was type {type(key)}"
+                                assert key in [
+                                    k for k, _ in full_config["KS"].items()
+                                ], f"Elements in each list of linked_params_for_sweep must be a parameter in the KS section, but {key} was not."
+                                length_of_this_linked_param = len(
+                                    KS_params_to_sweep[key]
+                                )
+                                if kid > 0:
+                                    assert (
+                                        length_of_previous_linked_param
+                                        == length_of_this_linked_param
+                                    ), f"The length of linked parameters must be equal, but lengths {length_of_previous_linked_param} and {length_of_this_linked_param} were found."
+                                length_of_previous_linked_param = (
+                                    length_of_this_linked_param
+                                )
                     except AssertionError as e:
                         raise AssertionError(
-                            "Elements of grouped_params_for_sweep must be lists of strings (parameter keys)"
+                            "Elements of linked_params_for_sweep must be lists of strings (parameter keys from the KS section). "
+                            "Linked parameters must all be the same length."
                         ) from e
                     # passed verification
-                    grouped_param_groups_list = full_config["Sorting"][
-                        "grouped_params_for_sweep"
+                    linked_param_groups_list = full_config["Sorting"][
+                        "linked_params_for_sweep"
                     ]
 
-                # set grouped parameters as separate entries with a new group key
+                # set linked parameters as separate entries with a new parameter group key
                 # take the keys in the order specified in KS_params_to_sweep to preserve expected order
-                for gid, grouped_params_keys in enumerate(grouped_param_groups_list):
+                for gid, linked_params_keys in enumerate(linked_param_groups_list):
                     KS_params_to_sweep[f"gp{gid}"] = [
-                        # list(gval) for gval in zip(*(params[k] for k in grouped_params_list))
+                        # list(gval) for gval in zip(*(params[k] for k in linked_params_list))
                         list(gval)
                         for gval in zip(
                             *(  # unpack values from dictionaries so they can be zipped
@@ -1117,28 +1133,26 @@ def main():
                                 for k in [
                                     key
                                     for key in KS_params_to_sweep_orig_keys
-                                    if str(key) in grouped_params_keys
+                                    if str(key) in linked_params_keys
                                 ]
                             )
                         )
                     ]
-                    # get rid of the individual keys that are in groups now
-                    for key in grouped_params_keys:
+                    # get rid of the individual keys that are in separate groups now
+                    for key in linked_params_keys:
                         del KS_params_to_sweep[key]
                 worker_params_list = list(
                     ParameterGrid(KS_params_to_sweep)
                 )  # get iterator of all possible param combinations
                 # now replace the gp# keys in each dictionary with the corresponding key-value pairs
                 for wid, worker_params in enumerate(worker_params_list):
-                    for gid, grouped_params_keys in enumerate(
-                        grouped_param_groups_list
-                    ):
+                    for gid, linked_params_keys in enumerate(linked_param_groups_list):
                         # make sure order is determined by KS_params_to_sweep
                         for key, param_key in enumerate(
                             [
                                 key
                                 for key in KS_params_to_sweep_orig_keys
-                                if str(key) in grouped_params_keys
+                                if str(key) in linked_params_keys
                             ]
                         ):
                             worker_params[param_key] = worker_params[f"gp{gid}"][key]
