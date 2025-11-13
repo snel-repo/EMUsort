@@ -1237,46 +1237,46 @@ def main():
                 for wid in range(total_KS_jobs)
             ]
 
-        # update the max resource limits to fix the "Too many open files" error during
-        # asynchronous writes at the end of sorting. This change allows higher values
-        # to be set for the max_concurrent_tasks value in the emu_config.yaml file
-        if platform.system() in ("Linux", "Darwin"):
-            try:
-                import resource
+            # update the max resource limits to fix the "Too many open files" error during
+            # asynchronous writes at the end of sorting. This change allows higher values
+            # to be set for the max_concurrent_tasks value in the emu_config.yaml file
+            if platform.system() in ("Linux", "Darwin"):
+                try:
+                    import resource
 
-                # Based on SI implementation, we need 1 permitted open file per cluster, per sort
-                # 1000 should be well above the upper limit of clusters identified in each sort
-                overestimated_num_resources_needed = int(
-                    round(1000 * this_config["SI"]["max_concurrent_tasks"])
-                )
-                original_resource_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
-                if original_resource_limits[0] < overestimated_num_resources_needed:
-                    resource.setrlimit(
-                        resource.RLIMIT_NOFILE,
-                        (
-                            overestimated_num_resources_needed,
-                            overestimated_num_resources_needed,
-                        ),
+                    # Based on SI implementation, we need 1 permitted open file per cluster, per sort
+                    # 1000 should be well above the upper limit of clusters identified in each sort
+                    overestimated_num_resources_needed = int(
+                        round(1000 * this_config["SI"]["max_concurrent_tasks"])
                     )
-                    updated_resource_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+                    original_resource_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+                    if original_resource_limits[0] < overestimated_num_resources_needed:
+                        resource.setrlimit(
+                            resource.RLIMIT_NOFILE,
+                            (
+                                overestimated_num_resources_needed,
+                                overestimated_num_resources_needed,
+                            ),
+                        )
+                        updated_resource_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+                        print(
+                            f"Updated resource limit from {original_resource_limits[0]} to {updated_resource_limits[0]}"
+                        )
+                except Exception as e:
+                    print(f"Could not set the new resource limits because:\n{e}")
                     print(
-                        f"Updated resource limit from {original_resource_limits[0]} to {updated_resource_limits[0]}"
+                        "You may need lower max_concurrent_tasks in emu_config.yaml,"
+                        " if 'Too many open files' error occurs during saving of results"
                     )
-            except Exception as e:
-                print(f"Could not set the new resource limits because:\n{e}")
-                print(
-                    "You may need lower max_concurrent_tasks in emu_config.yaml,"
-                    " if 'Too many open files' error occurs during saving of results"
-                )
 
-        print("Starting sorting jobs...")
-        msgs = run_KS_sorting(job_list, these_configs)
+            print("Starting sorting jobs...")
+            msgs = run_KS_sorting(job_list, these_configs)
 
-        # Now print the results in order
-        for msg in msgs:
-            print(msg[0])
-        for msg in msgs:
-            print(msg[1])
+            # Now print the results in order
+            for msg in msgs:
+                print(msg[0])
+            for msg in msgs:
+                print(msg[1])
 
     # Print status and time elapsed
     print("Pipeline finished! You've earned a break.")
