@@ -37,9 +37,18 @@ After cloning is complete, you will need to configure a uv, micromamba, or conda
 
 To update your `EMUsort` clone to the latest version, you can pull updates from the main repository. To do so, navigate into the folder where `EMUsort` was cloned and run:
 
-    git pull && git submodule update
+    git pull
+    git submodule update
 
-If you are updating and already previously installed EMUsort, you may encounter issues with the configuration file (if it's structure changed). If this happens, you can reset it to the default configuration file by running:
+If you used the `uv` method to install previously, and the submodules have been changed in the latest updates, you may need to run the below commands to update the submodules and reinstall those:
+
+>**Windows only:** Replace the `sync` command below with `uv sync --extra full --python 3.9`
+
+    uv cache clean
+    uv pip uninstall kilosort spikeinterface
+    uv sync --extra full
+
+If you are updating a previous EMUsort installation, you may encounter issues with the configuration file (if it's structure changed in the latest update). If this happens, you may want to backup your configuration file somewhere, then you can reset it to the new default configuration file by running:
 
     emusort --reset-config --folder /path/to/session_folder
 
