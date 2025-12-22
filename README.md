@@ -37,7 +37,7 @@ After cloning is complete, you will need to configure a uv, micromamba, or conda
 
 To update your `EMUsort` clone to the latest version, you can pull updates from the main repository. To do so, navigate into the folder where `EMUsort` was cloned and run:
 
-    git pull
+    git pull --recurse-submodules
     git submodule update
 
 If you used the `uv` method to install previously, and the submodules have been changed in the latest updates, you may need to run the below commands to update the submodules and reinstall those:
