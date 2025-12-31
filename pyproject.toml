@@ -17,7 +17,7 @@ Homepage = "https://github.com/snel-repo/EMUsort"
 emusort = "emusort.emusort:main" # Entry point for your command-line tool
 
 [build-system]
-requires = ["setuptools>=42", "wheel", "setuptools_scm"]
+requires = ["setuptools>=42", "wheel", "setuptools_scm", "numpy","spikeinterface","ruamel.yaml","scikit-learn","torch"]
 
 build-backend = "setuptools.build_meta"
 
@@ -77,6 +77,9 @@ phy = [
     "pyqtwebengine",
     "phy",
 ]
+
+[tool.setuptools.dynamic]
+version = {attr = "emusort.__version__"}
 
 [tool.uv]
 conflicts = [
