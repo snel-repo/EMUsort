@@ -321,7 +321,10 @@ def preprocess_ephys_data(
         concat_data_path = this_config["Data"]["session_folder"] / "concatenated_data"
         loaded_recording = si.load_extractor(concat_data_path)
     else:
-        loaded_recording = recording_obj.select_segments(emg_recordings_to_use)
+        if this_config["Data"]["dataset_type"] == "openephys":
+            loaded_recording = recording_obj.select_segments(emg_recordings_to_use)
+        else:
+            loaded_recording = recording_obj.select_segments(0)
 
     # check for [all] in emg_chan_list
     if this_config["Group"]["emg_chan_list"][iChanGroup][0] == "all":
@@ -769,6 +772,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     this_config["Results"]["type_I_scores"] = type_I_scores.tolist()
     this_config["Results"]["type_II_scores"] = type_II_scores.tolist()
     this_config["Results"]["emusort_scores"] = emusort_scores.tolist()
+    this_config["Results"]["num_clusters"] = len(this_config["Results"]["emusort_scores"])
     print(f"Worker {wid} exporting to Phy format...")
 
     # Export to Phy format asynchronously
@@ -827,7 +831,9 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     name = "".join(char for char in name if char not in " ()[]").rstrip(",_")
 
     # append score and optional tag
-    name = f"{name}_SCORE_{emusort_score:.3f}"
+    name = (
+        f"{name}_N{str(this_config['Results']['num_clusters'])}_SCORE_{emusort_score:.3f}"
+    )
     if this_config["sort_type"] == "ks4":
         name += "_KS4"
 
@@ -1249,7 +1255,9 @@ def main():
                     overestimated_num_resources_needed = int(
                         round(1000 * this_config["SI"]["max_concurrent_tasks"])
                     )
-                    original_resource_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+                    original_resource_limits = resource.getrlimit(
+                        resource.RLIMIT_NOFILE
+                    )
                     if original_resource_limits[0] < overestimated_num_resources_needed:
                         resource.setrlimit(
                             resource.RLIMIT_NOFILE,
@@ -1258,7 +1266,9 @@ def main():
                                 overestimated_num_resources_needed,
                             ),
                         )
-                        updated_resource_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+                        updated_resource_limits = resource.getrlimit(
+                            resource.RLIMIT_NOFILE
+                        )
                         print(
                             f"Updated resource limit from {original_resource_limits[0]} to {updated_resource_limits[0]}"
                         )

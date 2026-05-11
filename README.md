@@ -158,7 +158,7 @@ Items #2-4, will be generated automatically inside the provided session folder.
    - Record Node ### (if using OpenEphys session folder)
 2. `emu_config.yaml` file
    - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command line option. Within the configuration file, please note that you will have to change the `dataset_type` attribute to match your desired dataset type. Once you generate the default config template, please review it and utilize the comments as documentation to guide your actions
-3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_P1_#_P2_#...` folders, which are tagged with a datetime stamp, a channel group ID (if used), session folder name, and parameters used in a sweep in the same order as they appear under `KS_params_to_sweep` (if used)
+3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_P0_#_P1_#..._N#_SCORE#.###` folders, which are tagged with a datetime stamp, a channel group ID (`g#`, if used), session folder name, name value pairs of parameters used in a sweep in the same order as they appear in `emu_config.yaml` under `KS_params_to_sweep` (`..._P0_#...`, if used), the number of clusters identified (`...N#_...`), and a score for approximate estimation of the sorting performance (`_SCORE#.###`).
    - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']` and which channel was used as the reference for applying the delays under `ops['preprocessing']['reference_chan']`, which can be used as an index into `ops['preprocessing']['chan_delays']` or `emg_chans_used`). The corresponding channel indexes for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` is also dumped for future reference, which also includes channel indexes used in each sort as `emg_chans_used`.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
@@ -214,6 +214,11 @@ If you want to specify multiple settings at the same time, you can append any co
 As an example of using multiple commands, if you want to reset to the default configuration file, edit the new `emu_config.yaml`, and also spike sort immediately after saving, you can run the below:
 
     emusort --reset-config --config --sort --folder /path/to/session_folder
+
+### EMUsort Usage Tips to Boost Performance
+1. EMUsort is designed to be used to spike sort intramuscular EMG data where individual MUAP shapes are discernable and regular rather than surface EMG signals where the MUAP signals must be deconvolved or extracted with blind source separation.
+2. Be sure to remove segments of data that are not feasible to spike sort (e.g., segments containing artifacts due to physical perturbations of the EMG electrode) and that do not contain experimental data (e.g. remove all "rest" periods where the animal or human is performing miscellaneous movements). This ensures the sorting algorithm is not being given additional rare signals to deal with that do not pertain to the experiment, which can actually reduce the sorting performance in segments with more regular patterns of activity.
+3. Try to include more than 2 minutes worth of high-SNR multichannel intramuscular EMG recordings to try provide more than 200 spike examples for each MU present in the dataset. In addition, sorting more than 10-20 minutes worth of data can sometimes introduce challenges with stable identification because the MUAPs can actually change shape across this duration of time, which can result in that MUAP being sorted as 2 different clusters occuring in 2 different time epochs of the recording.
 
 ### Inspecting and Curating with `phy`
 
