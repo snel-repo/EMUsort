@@ -14,12 +14,22 @@ readme = "README.md"
 Homepage = "https://github.com/snel-repo/EMUsort"
 
 [project.scripts]
-emusort = "emusort.emusort:main" # Entry point for your command-line tool
+emusort = "emusort.emusort:main" # Entry point for command-line interface
 
 [build-system]
-requires = ["setuptools>=42", "wheel", "setuptools_scm", "numpy","spikeinterface","ruamel.yaml","scikit-learn","torch"]
+requires = [
+    "hatchling",
+    "uv-dynamic-versioning",
+    "wheel",
+    "numpy",
+    "spikeinterface[full]",
+    "ruamel.yaml",
+    "scikit-learn",
+    "torch"
+    ]
+build-backend = "hatchling.build"
 
-build-backend = "setuptools.build_meta"
+# build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
@@ -35,17 +45,20 @@ full = [
     "matplotlib",
     "pandas",
     "ruamel.yaml",
+    # "phy==2.1.0rc1",
+    "kilosort @ {root:uri}/src/emusort/Kilosort4",
+    "spikeinterface[full]==0.100.8",
+    # "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
+    # "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface",
+    "torch>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
+    "torchaudio>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
+    "torch>=2.4.0; sys_platform == 'darwin'",
+    "torchaudio>=2.4.0; sys_platform == 'darwin'",
     "pyqt5",
     "pyqtgraph",
     "pyqt5-sip",
     "pyqtwebengine",
     "phy",
-    "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
-    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface",
-    "torch>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
-    "torchaudio>=2.4.0; sys_platform == 'win32' or sys_platform == 'linux'",
-    "torch>=2.4.0; sys_platform == 'darwin'",
-    "torchaudio>=2.4.0; sys_platform == 'darwin'",
 ]
 # use "core" for a minimal install of emusort dependencies without pytorch
 # you will also need "cpu" or "cu118", for example, running: uv sync --extra core --extra cu118
@@ -53,8 +66,10 @@ core = [
     "matplotlib",
     "pandas",
     "ruamel.yaml",
-    "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
-    "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
+    "kilosort @ {root:uri}/src/emusort/Kilosort4",
+    "spikeinterface[full]==0.100.8",
+    # "kilosort @ file:///${PROJECT_ROOT}/src/emusort/Kilosort4",
+    # "spikeinterface @ file:///${PROJECT_ROOT}/src/emusort/spikeinterface"
 ]
 # if using the "core" extra, install the cpu version of pytorch
 cpu = [
@@ -76,10 +91,16 @@ phy = [
     "pyqt5-sip",
     "pyqtwebengine",
     "phy",
+    # "phy==2.1.0rc1",
 ]
 
-[tool.setuptools.dynamic]
-version = {attr = "emusort.__version__"}
+# [tool.setuptools.dynamic]
+# version = {attr = "emusort.__version__"}
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.uv]
 conflicts = [
@@ -123,9 +144,9 @@ constraint-dependencies = [
 # spikeinterface = [
 #     {git = "https://github.com/snel-repo/spikeinterface.git"} # spikeinterface snel-repo 
 # ]
-phy = [
-    {git = "https://github.com/cortex-lab/phy.git", rev = "7a2494b"} # Phy GUI
-]
+# phy = [
+#     {git = "https://github.com/cortex-lab/phy.git", rev = "7a2494b"} # Phy GUI
+# ]
 
 # Specify CPU/CUDA version for download. Also enable "full" flag to get CUDA
 torch = [
