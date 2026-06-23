@@ -1,6 +1,6 @@
 import sys
 
-if sys.version_info < (3, 9):
+if sys.version_info < (3, 10):
     sys.exit(
         "Error: Your Python version is not supported. Please use Python 3.9 or later."
     )
@@ -11,6 +11,7 @@ start_time = datetime.now()  # include imports in time cost
 
 import argparse
 import asyncio
+import csv
 import os
 import platform
 import shutil
@@ -28,6 +29,7 @@ from probeinterface import Probe
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 from spikeinterface.core import write_binary_recording
+from spikeinterface.exporters import export_to_phy
 from spikeinterface.qualitymetrics.misc_metrics import (
     compute_amplitude_cutoffs,
     compute_firing_ranges,
@@ -37,6 +39,8 @@ from spikeinterface.qualitymetrics.misc_metrics import (
     compute_snrs,
 )
 from torch.cuda import is_available
+
+from .ks4mods.si_sorter_class import KS4EMUsortSorter
 
 
 def create_config(
@@ -188,7 +192,6 @@ def load_ephys_data(
 
     # blackrock dataset
     elif dataset_type == "blackrock":
-
         print("Running Blackrock Read Code...")
 
         # debug = sorted(Path(session_folder).iterdir())
@@ -390,9 +393,9 @@ def preprocess_ephys_data(
             #         np.diff(numeric_idxs).all() == 1
             #     ), f"Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. If using a threshold, it must be a number after the method string."
             method_str = remove_bad_emg_chans[: numeric_idxs[0]]
-            assert (
-                method_str != "coherence+psd"
-            ), f'Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. "coherence+psd" method does not take a threshold value.'
+            assert method_str != "coherence+psd", (
+                f'Invalid input for remove_bad_emg_chans: {remove_bad_emg_chans}. "coherence+psd" method does not take a threshold value.'
+            )
             threshold = float(remove_bad_emg_chans[numeric_idxs[0] :])
         else:
             method_str = remove_bad_emg_chans
@@ -413,10 +416,10 @@ def preprocess_ephys_data(
     good_channel_ids = [
         ch for ch in recording_filtered.get_channel_ids() if ch not in bad_channel_ids
     ]
-    if bad_channel_ids is None and remove_bad_emg_chans == True:
+    if bad_channel_ids is None and remove_bad_emg_chans:
         print("No bad channels detected.")
         chans_to_be_used = good_channel_ids
-    elif remove_bad_emg_chans == False:
+    elif not remove_bad_emg_chans:
         print(
             f"Bad channels detected: {bad_channel_ids}, and none were automatically removed because remove_bad_emg_chans is set to False."
         )
@@ -495,7 +498,7 @@ def concatenate_emg_data(
                 try:
                     last_config = yaml.load(f)
                     last_config_dict = dict(last_config)  # Cast to dictionary
-                except TypeError as e:
+                except TypeError:
                     print(
                         "Error loading previous configuration file 'last_config.yaml' or it is empty."
                     )
@@ -561,10 +564,10 @@ def get_emusort_scores(we, wid):
 
     def get_t2_scores(we):
         ## Check Type II errors (false negatives)
-        presence_ratios = compute_presence_ratios(
-            we, bin_duration_s=20.0, mean_fr_ratio_thresh=0.5
-        )
-        presence_ratio_scores = np.fromiter(presence_ratios.values(), float)
+        # presence_ratios = compute_presence_ratios(
+        #     we, bin_duration_s=20.0, mean_fr_ratio_thresh=0.5
+        # )
+        # presence_ratio_scores = np.fromiter(presence_ratios.values(), float)
 
         amplitude_cutoffs = compute_amplitude_cutoffs(
             we, peak_sign="both", num_histogram_bins=32, amplitudes_bins_min_ratio=4
@@ -577,7 +580,7 @@ def get_emusort_scores(we, wid):
             nan=0,  # if nan, replace with 0 (bad score due to too few spikes)
         )
 
-        type_II_scores = denan_amplitude_Gaussianity_scores * presence_ratio_scores
+        type_II_scores = denan_amplitude_Gaussianity_scores  # * presence_ratio_scores
         return type_II_scores
 
     def get_fr_val_scores(we):
@@ -607,6 +610,12 @@ def get_emusort_scores(we, wid):
         clipped_snr_scores = np.clip(snr_scores, 0, 1)
         return clipped_snr_scores
 
+    def get_spike_counts(we):
+        spike_counts = np.zeros_like(we.unit_ids)
+        for iClust in we.unit_ids:
+            spike_counts[iClust] = we.get_waveforms(iClust).shape[0]
+        return spike_counts
+
     # get quality metric scores asynchronously
     clipped_snr_scores = get_snr_scores(we)
     firing_rate_validity_scores = get_fr_val_scores(we)
@@ -621,20 +630,23 @@ def get_emusort_scores(we, wid):
         * type_II_scores
     )
     emusort_score = np.nanmean(emusort_scores)
+    spike_counts = get_spike_counts(we)
 
     # get quality metric report string for this worker
     report = (
         "------------------------------------------------------------\n"
         f" Worker {wid} Quality Scores Report:\n"
-        f" SNR scores:\n{clipped_snr_scores}\n"
-        f" Firing rate validity:\n{firing_rate_validity_scores}\n"
-        f" Type I error scores:\n{type_I_scores}\n"
-        f" Type II error scores:\n{type_II_scores}\n"
-        f" EMUsort scores:\n{emusort_scores}\n"
+        f" SNR scores:\n{clipped_snr_scores.round(6)}\n"
+        f" Firing rate validity:\n{firing_rate_validity_scores.round(6)}\n"
+        f" Type I error scores:\n{type_I_scores.round(6)}\n"
+        f" Type II error scores:\n{type_II_scores.round(6)}\n"
+        f" EMUsort scores:\n{emusort_scores.round(6)}\n"
+        f" Spike counts:\n{spike_counts}\n"
         "------------------------------------------------------------\n"
         f" Worker {wid} Overall EMUsort score: {emusort_score:.3f}\n"
         "------------------------------------------------------------\n"
     )
+
     return (
         clipped_snr_scores,
         firing_rate_validity_scores,
@@ -642,12 +654,14 @@ def get_emusort_scores(we, wid):
         type_II_scores,
         emusort_scores,
         emusort_score,
+        spike_counts,
         report,
     )
 
 
 def write_rec_and_params(
     we,
+    processed,
     sorted_folder,
     this_sorting,
     this_config,
@@ -655,6 +669,42 @@ def write_rec_and_params(
     dtype=None,
     **job_kwargs,
 ):
+    def write_score_tsv(we, this_config, tsv_output_folder, processed=False):
+        score_tsv_data = []
+        if processed:
+            uids = []
+            with open(
+                tsv_output_folder / "cluster_si_unit_ids.tsv",
+                "r",
+                newline="",
+                encoding="utf-8",
+            ) as f:
+                reader = csv.DictReader(f, delimiter="\t")
+                for entry in reader:
+                    uids.append(int(entry["si_unit_id"]))
+                uids = np.fromiter(uids, int)
+        else:
+            uids = we.unit_ids
+
+        for i, uid in enumerate(uids):
+            idx = np.nonzero(we.unit_ids == uid)[0][0]
+            score_tsv_data.append(
+                {
+                    "cluster_id": i if processed else uid,
+                    "score": this_config["Results"]["emusort_scores"][idx],
+                }
+            )
+
+        score_tsv_fields = ["cluster_id", "score"]
+
+        with open(
+            tsv_output_folder / "cluster_scores.tsv", "w", newline="", encoding="utf-8"
+        ) as f:
+            writer = csv.DictWriter(f, fieldnames=score_tsv_fields, delimiter="\t")
+            writer.writeheader()
+            writer.writerows(score_tsv_data)
+        return
+
     # save dat file
     if dtype is None:
         if we.has_recording():
@@ -681,14 +731,43 @@ def write_rec_and_params(
         Path(sorted_folder / "params.py").touch()
     with (sorted_folder / "params.py").open("w") as f:
         if use_relative_path:
-            f.write(f"dat_path = r'recording.dat'\n")
+            f.write("dat_path = r'recording.dat'\n")
         else:
             f.write(f"dat_path = r'{str(rec_path)}'\n")
         f.write(f"n_channels_dat = {this_config['num_chans']}\n")
         f.write(f"dtype = '{dtype_str}'\n")
-        f.write(f"offset = 0\n")
+        f.write("offset = 0\n")
         f.write(f"sample_rate = {this_sorting.get_sampling_frequency()}\n")
         f.write(f"hp_filtered = {we.is_filtered()}")
+
+    # write EMUsort score tsv for use with Phy
+    write_score_tsv(we, this_config, sorted_folder)
+
+    if (
+        this_config["KS"]["keep_good_only"]
+        or this_config["SI"]["cluster_score_threshold"]
+    ):
+        write_score_tsv(we, this_config, sorted_folder / "processed_output", processed)
+        # write a copy of the params.py file with an updated relative path
+        if use_relative_path:
+            good_only_rec_line = "dat_path = r'../recording.dat'\n"
+            with (sorted_folder / "processed_output" / "params.py").open("r") as f2:
+                lines = f2.readlines()
+            found = False
+            with (sorted_folder / "processed_output" / "params.py").open("w") as f2:
+                for line in lines:
+                    if line.startswith("dat_path"):
+                        f2.write(good_only_rec_line)
+                        found = True
+                    else:
+                        f2.write(line)
+                if not found:
+                    f2.write(good_only_rec_line)  # add to the bottom if not found
+        else:  # with absolute path an identical copy is fine
+            shutil.copyfile(
+                sorted_folder / "params.py",
+                sorted_folder / "processed_output" / "params.py",
+            )
 
 
 async def extract_sorting_result(this_sorting, this_config, this_job, wid):
@@ -716,9 +795,11 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
             mode="memory",
             ms_before=ms_buffer,
             ms_after=ms_buffer,
+            max_spikes_per_unit=None,
             # overwrite=True,
             sparse=False,
         )
+        removed_excess_spikes = False
     except ValueError as e:
         import spikeinterface.curation as scur
 
@@ -735,9 +816,11 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
             mode="memory",
             ms_before=ms_buffer,
             ms_after=ms_buffer,
+            max_spikes_per_unit=None,
             # overwrite=True,
             sparse=False,
         )
+        removed_excess_spikes = True
     print(f"Worker {wid} finished extracting waveforms, computing quality metrics...")
 
     # Compute quality metrics asynchronously
@@ -748,8 +831,54 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         type_II_scores,
         emusort_scores,
         emusort_score,
+        spike_counts,
         report,
     ) = get_emusort_scores(we, wid)
+
+    if this_config["SI"]["cluster_score_threshold"] > 0:
+        thresholded_cluster_scores = (
+            emusort_scores > this_config["SI"]["cluster_score_threshold"]
+        )
+        clusters_to_keep = np.nonzero(thresholded_cluster_scores)[0]
+
+        if removed_excess_spikes:
+            curated_sorting = remove_excess_spikes_sorting.select_units(
+                clusters_to_keep
+            )
+        else:
+            curated_sorting = this_sorting.select_units(clusters_to_keep)
+
+        we_proc = await asyncio.to_thread(
+            si.extract_waveforms,
+            this_job["recording"],
+            curated_sorting,
+            # waveforms_folder,
+            mode="memory",
+            ms_before=ms_buffer,
+            ms_after=ms_buffer,
+            # overwrite=True,
+            sparse=False,
+        )
+        # update the subsampled scores and report
+        # snr_scores = snr_scores[clusters_to_keep]
+        # firing_rate_validity_scores = firing_rate_validity_scores[clusters_to_keep]
+        # type_I_scores = type_I_scores[clusters_to_keep]
+        # type_II_scores = type_II_scores[clusters_to_keep]
+        # emusort_scores = emusort_scores[clusters_to_keep]
+        # emusort_score = np.nanmean(emusort_scores)
+        # report = (
+        #     "------------------------------------------------------------\n"
+        #     f" Worker {wid} Quality Scores Report (Processed):\n"
+        #     f" SNR scores:\n{snr_scores}\n"
+        #     f" Firing rate validity:\n{firing_rate_validity_scores}\n"
+        #     f" Type I error scores:\n{type_I_scores}\n"
+        #     f" Type II error scores:\n{type_II_scores}\n"
+        #     f" EMUsort scores:\n{emusort_scores}\n"
+        #     "------------------------------------------------------------\n"
+        #     f" Worker {wid} Overall EMUsort score: {emusort_score:.3f}\n"
+        #     "------------------------------------------------------------\n"
+        # )
+        # spike_counts = spike_counts[clusters_to_keep]
 
     # get channel noise levels
     try:
@@ -766,32 +895,47 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     # add Results section to this_config
     this_config["Results"] = {}
     this_config["Results"]["snr_scores"] = snr_scores.tolist()
-    this_config["Results"][
-        "firing_rate_validity_scores"
-    ] = firing_rate_validity_scores.tolist()
+    this_config["Results"]["firing_rate_validity_scores"] = (
+        firing_rate_validity_scores.tolist()
+    )
     this_config["Results"]["type_I_scores"] = type_I_scores.tolist()
     this_config["Results"]["type_II_scores"] = type_II_scores.tolist()
     this_config["Results"]["emusort_scores"] = emusort_scores.tolist()
-    this_config["Results"]["num_clusters"] = len(this_config["Results"]["emusort_scores"])
-    print(f"Worker {wid} exporting to Phy format...")
+    this_config["Results"]["spike_counts"] = spike_counts.tolist()
+    this_config["Results"]["num_clusters"] = len(
+        this_config["Results"]["emusort_scores"]
+    )
+
+    sorter_output_folder = sorted_folder / "sorter_output"
+    movetree(sorter_output_folder, sorted_folder)
+    shutil.rmtree(sorter_output_folder, ignore_errors=True)
 
     # Export to Phy format asynchronously
-    # await asyncio.to_thread(
-    #     export_to_phy,
-    #     we,
-    #     output_folder=phy_folder,
-    #     compute_pc_features=False,
-    #     copy_binary=True,
-    #     use_relative_path=True,
-    #     verbose=False,
-    # )
-    sorter_output = sorted_folder / "sorter_output"
-    movetree(sorter_output, sorted_folder)
-    shutil.rmtree(sorter_output, ignore_errors=True)
+    print(f"Worker {wid} exporting to Phy format...")
+    # adding this to get the SI-processed Phy output which can remove non-"good" clusters
+    if (
+        this_config["KS"]["keep_good_only"]
+        or this_config["SI"]["cluster_score_threshold"]
+    ):
+        phy_proc_output_folder = sorted_folder / "processed_output"
+
+        await asyncio.to_thread(
+            export_to_phy,
+            we_proc,
+            output_folder=phy_proc_output_folder,
+            compute_pc_features=False,
+            copy_binary=False,
+            use_relative_path=True,
+            verbose=False,
+        )
+        # movetree(phy_output_folder, sorted_folder)
+        # shutil.rmtree(phy_output_folder, ignore_errors=True)
+        processed = True
 
     await asyncio.to_thread(
         write_rec_and_params,
         we,
+        processed,
         sorted_folder,
         this_sorting,
         this_config,
@@ -831,9 +975,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     name = "".join(char for char in name if char not in " ()[]").rstrip(",_")
 
     # append score and optional tag
-    name = (
-        f"{name}_N{str(this_config['Results']['num_clusters'])}_SCORE_{emusort_score:.3f}"
-    )
+    name = f"{name}_N{str(this_config['Results']['num_clusters'])}_SCORE_{emusort_score:.3f}"
     if this_config["sort_type"] == "ks4":
         name += "_KS4"
 
@@ -841,9 +983,14 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
 
     # move and save
     shutil.move(sorted_folder, final_path)
-    dump_yaml(final_path / f'{this_config["sort_type"]}_config.yaml', this_config)
+    dump_yaml(final_path / f"{this_config['sort_type']}_config.yaml", this_config)
     np.save(final_path / "emg_chans_used.npy", this_config["emg_chans_used"])
 
+    if (
+        this_config["KS"]["keep_good_only"]
+        or this_config["SI"]["cluster_score_threshold"]
+    ):
+        final_path = final_path / "processed_output"
     phy_msg = f"\nTo view Worker {wid} result in Phy, run:\nphy template-gui {(final_path / 'params.py').as_posix()}\n"
 
     return [report, phy_msg]
@@ -883,11 +1030,11 @@ async def extract_concurrently(
             # )
         except Exception as e:
             raise Exception(
-                f"Error in parallel extraction of batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}, try reducing max_concurrent_tasks in 'SI' section of emu_config.yaml next time. ..."
+                f"Error in parallel extraction of batch {i // max_concurrent_tasks + 1}/{np.ceil(len(tasks) / max_concurrent_tasks).astype(int)}, try reducing max_concurrent_tasks in 'SI' section of emu_config.yaml next time. ..."
             ) from e
         print(
             "------------------------------------------------------------\n"
-            f"All tasks done for worker batch {i//max_concurrent_tasks + 1}/{np.ceil(len(tasks)/max_concurrent_tasks).astype(int)}. Yay!\n"
+            f"All tasks done for worker batch {i // max_concurrent_tasks + 1}/{np.ceil(len(tasks) / max_concurrent_tasks).astype(int)}. Yay!\n"
             "------------------------------------------------------------\n"
         )
     # Flatten the list of messages
@@ -916,6 +1063,8 @@ def run_KS_sorting(job_list, these_configs):
     #         **this_config["KS"],
     #     }
 
+    # Assign class definition
+    ss.sorter_dict[KS4EMUsortSorter.sorter_name] = KS4EMUsortSorter
     # Run spike sorting
     sortings = ss.run_sorter_jobs(
         job_list=job_list,
@@ -1023,15 +1172,14 @@ def main():
     )
 
     # below are checks of the configuration file to avoid downstream errors
-    assert full_config["KS"]["nblocks"] == False, "nblocks must be False for EMUsort"
-    assert (
-        full_config["KS"]["do_correction"] == False
-    ), "do_correction must be False for EMUsort"
+    assert not full_config["KS"]["nblocks"], "nblocks must be False for EMUsort"
+    assert not full_config["KS"]["do_correction"], (
+        "do_correction must be False for EMUsort"
+    )
     # assert full_config["KS"]["do_CAR"] == False, "do_CAR must be False for EMUsort"
 
     # EMG Preprocessing and Spike Sorting
     if args.sort:
-
         # load data from the session folder
         recording = load_ephys_data(full_config)
         # Setting GPU ordering for parallel jobs to match nvidia-smi and nvitop
@@ -1058,7 +1206,7 @@ def main():
             grp_zfill_amount = len(str(len(full_config["Group"]["emg_chan_list"])))
             this_group_sorted_folder = (
                 Path(full_config["Sorting"]["output_folder"])
-                / f'sorted_g{str(iChanGroup).zfill(grp_zfill_amount)}_{Path(full_config["Data"]["session_folder"]).name}'
+                / f"sorted_g{str(iChanGroup).zfill(grp_zfill_amount)}_{Path(full_config['Data']['session_folder']).name}"
             )
             print(f"Recording information: {preproc_recording}")
 
@@ -1067,18 +1215,18 @@ def main():
                 total_KS_jobs = 1
             else:
                 # input verification
-                assert (
-                    full_config["Sorting"]["KS_params_to_sweep"] is not None
-                ), "You must provide at least 1 parameter under KS_params_to_sweep if do_KS_param_sweep is True"
+                assert full_config["Sorting"]["KS_params_to_sweep"] is not None, (
+                    "You must provide at least 1 parameter under KS_params_to_sweep if do_KS_param_sweep is True"
+                )
 
                 for key, val in full_config["Sorting"]["KS_params_to_sweep"].items():
                     try:
-                        assert key in [
-                            k for k, _ in full_config["KS"].items()
-                        ], f"Keys in KS_params_to_sweep must be a parameter in the KS section, but {str(key)} was not found"
-                        assert isinstance(
-                            val, list
-                        ), f"The values of each key in KS_params_to_sweep must be a list, but the value for {str(key)} was type {type(val)}. Try adding brackets"
+                        assert key in [k for k, _ in full_config["KS"].items()], (
+                            f"Keys in KS_params_to_sweep must be a parameter in the KS section, but {str(key)} was not found"
+                        )
+                        assert isinstance(val, list), (
+                            f"The values of each key in KS_params_to_sweep must be a list, but the value for {str(key)} was type {type(val)}. Try adding brackets"
+                        )
                     except AssertionError as e:
                         raise AssertionError(
                             "Elements of KS_params_to_sweep must be key-value pairs, with valid keys from the KS section and a list of values for each key."
@@ -1098,20 +1246,26 @@ def main():
                         for lst in full_config["Sorting"]["linked_params_for_sweep"]:
                             assert isinstance(lst, list)
                             for kid, key in enumerate(lst):
-                                assert isinstance(
-                                    key, str
-                                ), f"Elements in each list of linked_params_for_sweep must be strings, but {str(key)} was type {type(key)}"
+                                assert isinstance(key, str), (
+                                    f"Elements in each list of linked_params_for_sweep must be strings, but {str(key)} was type {type(key)}"
+                                )
                                 assert key in [
                                     k for k, _ in full_config["KS"].items()
-                                ], f"Elements in each list of linked_params_for_sweep must be a parameter in the KS section, but {key} was not."
+                                ], (
+                                    f"Elements in each list of linked_params_for_sweep must be a parameter in the KS section, but {key} was not."
+                                )
                                 length_of_this_linked_param = len(
                                     KS_params_to_sweep[key]
                                 )
-                                if kid > 0:
+                                if kid == 0:
+                                    length_of_previous_linked_param = 0
+                                else:
                                     assert (
                                         length_of_previous_linked_param
                                         == length_of_this_linked_param
-                                    ), f"The length of linked parameters must be equal, but lengths {length_of_previous_linked_param} and {length_of_this_linked_param} were found."
+                                    ), (
+                                        f"The length of linked parameters must be equal, but lengths {length_of_previous_linked_param} and {length_of_this_linked_param} were found."
+                                    )
                                 length_of_previous_linked_param = (
                                     length_of_this_linked_param
                                 )
@@ -1177,9 +1331,9 @@ def main():
             ]
             # ensure proper configuration for parallel jobs
             if full_config["Sorting"]["num_KS_jobs"] > 1:
-                assert (
-                    full_config["Sorting"]["do_KS_param_sweep"] == 1
-                ), "Parallel jobs can only be used when do_KS_param_sweep is set to True. Set num_KS_jobs to 1 if do_KS_param_sweep is False."
+                assert full_config["Sorting"]["do_KS_param_sweep"] == 1, (
+                    "Parallel jobs can only be used when do_KS_param_sweep is set to True. Set num_KS_jobs to 1 if do_KS_param_sweep is False."
+                )
             # create new folder for each parallel job to store results temporarily
             these_configs = []
             recording_list = []
@@ -1225,7 +1379,7 @@ def main():
                     )
                 if this_config["KS"]["torch_device"] == "cpu":
                     print(
-                        f"Using CPU for Kilosort. Runtimes will be MUCH slower. If trying CUDA, make sure GPU(s) can be detected."
+                        "Using CPU for Kilosort. Runtimes will be MUCH slower. If trying CUDA, make sure GPU(s) can be detected."
                     )
                 this_config["emg_chans_used"] = (
                     preproc_recording.get_channel_ids().tolist()
@@ -1235,7 +1389,7 @@ def main():
 
             job_list = [
                 {
-                    "sorter_name": "kilosort4",
+                    "sorter_name": KS4EMUsortSorter.sorter_name,
                     "recording": recording_list[wid],
                     "output_folder": these_configs[wid]["Sorting"]["sorted_folder"],
                     **these_configs[wid]["KS"],

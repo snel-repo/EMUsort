@@ -41,7 +41,7 @@ Sorting:
     linked_params_for_sweep: # list of lists of strings (parameter keys from KS section)
         # some parameters should be linked to avoid bad combinations and reduce overall run count
         # for linked parameters, only matching indexes will be taken as a valid combination
-        # combinations of different indexes for linked parameters will not tried
+        # combinations of different indexes for linked parameters will not be tried
         # so, the first indexes of each linked parameter will be used as a combination, then all the second indexes and so on
         # this allows explicit combinations to be set for linked parameters
         # leave it blank to disable
@@ -106,3 +106,4 @@ KS:
 SI:
     chunk_duration: '20s' # Chunk duration in seconds if float or with units if str (e.g. '20s', '500ms')
     max_concurrent_tasks: 5 # batch size to perform asynchronous disk reads/writes. Higher is generally faster, with the limit at the number of parameter sweep combinations, but lower can be more stable.
+    cluster_score_threshold: 0 # minimum emusort score required to keep a cluster, set 0 to disable

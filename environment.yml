@@ -35,6 +35,7 @@ dependencies:
   - ruamel.yaml
   - scikit-learn>1.3.2
   - scipy
+  - setuptools<=80.10.2
   - torchaudio
   - torchvision
   - tqdm
@@ -42,8 +43,7 @@ dependencies:
   - xarray
   - zarr
   - pip:
-        # - "-e ./src/emusort/spikeinterface" # install local spikeinterface for EMUsort
-        - "-e ./src/emusort/Kilosort4" # install local Kilosort4 for EMUsort
+        - kilosort==4.0.18 # custom spikeinterface class later modifies kilosort for EMUsort
         - spikeinterface[full]==0.100.8
         - git+https://github.com/cortex-lab/phy.git@7a2494b # latest working version of phy from GitHub
         - "-e ." # finally install EMUsort locally

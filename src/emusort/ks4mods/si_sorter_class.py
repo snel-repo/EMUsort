@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Union
 
-from packaging import version
 from spikeinterface.sorters.basesorter import BaseSorter
 from spikeinterface.sorters.external.kilosortbase import KilosortBase
 
@@ -153,9 +152,10 @@ class KS4EMUsortSorter(BaseSorter):
 
         import numpy as np
         import torch
-        from kilosort.io import BinaryFiltered, RecordingExtractorAsArray, load_probe
-        from kilosort.parameters import DEFAULT_SETTINGS
-        from kilosort.run_kilosort import (
+
+        from ..ks4mods.io import BinaryFiltered, RecordingExtractorAsArray, load_probe
+        from ..ks4mods.parameters import DEFAULT_SETTINGS
+        from ..ks4mods.run_kilosort import (
             cluster_spikes,
             compute_drift_correction,
             compute_preprocessing,
