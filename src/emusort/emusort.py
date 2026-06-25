@@ -1,13 +1,13 @@
-import sys
-
-if sys.version_info < (3, 10):
-    sys.exit(
-        "Error: Your Python version is not supported. Please use Python 3.9 or later."
-    )
-
 from datetime import datetime
 
 start_time = datetime.now()  # include imports in time cost
+
+import sys
+
+if sys.version_info < (3, 9):
+    sys.exit(
+        "Error: Your Python version is not supported. Please use Python 3.9 or later."
+    )
 
 import argparse
 import asyncio
@@ -1373,6 +1373,13 @@ def main():
                 this_config["KS"]["nearest_templates"] = min(
                     this_config["num_chans"], this_config["KS"]["nearest_templates"]
                 )  # do not let nearest_templates exceed the number of channels
+                if this_config["KS"]["torch_device"].contains("cuda:"):
+                    print(
+                        f"Resetting torch_device from {this_config['KS']['torch_device']} to 'auto'. Use GPU_to_use to control GPU choice."
+                    )
+                    this_config["KS"]["torch_device"] = (
+                        "auto"  # reset to 'auto' in the case of reusing a dumped config
+                    )
                 if this_config["KS"]["torch_device"] == "auto":
                     this_config["KS"]["torch_device"] = (
                         "cuda:" + torch_device_ids[wid] if is_available() else "cpu"

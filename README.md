@@ -268,9 +268,9 @@ By using `linked_params_for_sweep`, you get explicit control of some Kilosort pa
 
 > For example, the default configuration file specifies 5 settings each for `Th_universal`, `Th_learned`, and `Th_single_ch`. If no parameters were linked, the number of combinations would by 5\*5\*5=125, which is a very large number of combinations. So, instead, `Th_learned`, and `Th_single_ch` are linked by adding a sublist with the two keys: `linked_params_for_sweep: [[Th_universal, Th_learned]]`. In this case, because the linked parameters are treated as a single parameter in the combinatorics multiplication, the number of combinations will be 5*5=25.
 
-### Running EMUsort As If Default Kilosort4 (v4.0.11)
+### Running EMUsort As If Default Kilosort4
 
-In order to run EMUsort exactly like a default Kilosort4 (v4.0.11) installation for comparison of performance, you can use the short-form command `emusort -kcsf .` to run it in the current folder, or use the below, longer-form command:
+To compare performance, you can also run EMUsort exactly like a default Kilosort4 installation (v4.0.11, with bug fixes up through v4.0.18) by using the short-form command `emusort -kcsf .` to run it in the current folder, or use the longer-form command below:
 
     emusort --ks4 --config --sort --folder /path/to/session_folder
 
@@ -291,7 +291,12 @@ To run Kilosort4 emulation, reset `ks4_config.yaml` to default settings, edit th
 This emulation capability is useful for comparing the performance of EMUsort vs. Kilosort4.
 
 ## Final Notes
+If there are any discrepancies in the instructions/comments or any problems with the code, please submit an issue on GitHub so we can try to address the issue ASAP. If you'd like to request a specific feature or improvement to EMUsort, please let us know by submitting an issue on GitHub with the "enhancement" label with details about the feature request. 
 
-If there are any discrepancies in the instructions or any problems with the comments/code, please submit an issue on GitHub so we can try to address the issue ASAP.
+If you found this work helpful or just love emus, give us a ⭐️ on GitHub! For donations to support feature requests or continued development of EMUsort, feel free to use either of the below cryptocurrency addresses.
 
-Thank you for trying out EMUsort! If you find it helpful, enjoy it, or love emus, give us a ⭐️ on GitHub!
+Monero (XMR, preferred):
+- 84nM4hXAyfDKNHJo6osXF74a1kqeTZrCTBdX8NMrYCoaLk7xagksxxd2uhxdQh5Z8xPFXdvHKL79zNbqKd3J26eEDcZ6gKW 
+
+Bitcoin (BTC):
+- bc1pjk0n6ty5l0qc8ed536a4kmgczwwjj2023d3rt6n97rj6q844jefqk3efs5
