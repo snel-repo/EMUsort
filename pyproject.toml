@@ -2,7 +2,7 @@
 name = "emusort"
 dynamic = ["version"]
 description = "A command line tool for high performance spike sorting of multichannel, single unit electromyography"
-requires-python = ">=3.9,<3.12" # python version constrained by spikeinterface, joblib, and Phy GUI requirements. Windows Phy seems to not work with Python >= 3.10
+requires-python = ">=3.10,<3.12" # python version constrained by spikeinterface, joblib, and Phy GUI requirements. Windows Phy seems to not work with Python >= 3.10
 authors = [
     { name = "Sean O'Connell", email = "smarkoco@proton.me" },
     { name = "Jonathan A Michaels", email = "jmichae@yorku.ca" },
@@ -130,8 +130,8 @@ constraint-dependencies = [
     "pyqtwebengine < 5.15.2; sys_platform == 'win32'",
     "pyqtwebengine > 5.15.2; sys_platform == 'linux'",
     "qtpy >= 2.4.1; sys_platform == 'linux'",
-    "setuptools>=42,<=80.10.2",
-    "spikeinterface==0.100.8",
+    "setuptools>=42,<81",
+    "spikeinterface==0.104.7",
     "torch>=2.4.0",
     "torchaudio>=2.4.0",
 ]

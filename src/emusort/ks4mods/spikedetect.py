@@ -1,17 +1,17 @@
 import logging
+import os
+import warnings
 from io import StringIO
 
 logger = logging.getLogger(__name__)
 
 import numpy as np
 import torch
-from kilosort.utils import template_path
+from kilosort.utils import log_performance, template_path
 from sklearn.cluster import HDBSCAN, KMeans
 from sklearn.decomposition import TruncatedSVD
 from torch.nn.functional import avg_pool2d, conv1d, max_pool1d, max_pool2d
 from tqdm import tqdm
-
-device = torch.device("cuda")
 
 
 def my_max2d(X, dt):
@@ -74,6 +74,7 @@ def extract_snippets(
     xy = xy_all[torch.unique(xy_all[:, 1], return_inverse=True)[1].unique()]
 
     clips = X[xy[:, :1], xy[:, 1:2] - twav_min + torch.arange(nt, device=device)]
+
     return clips
 
 
@@ -91,6 +92,7 @@ def extract_wPCA_wTEMP(
     i = 0
     for j in range(0, bfile.n_batches, nskip):
         X = bfile.padded_batch_to_torch(j, ops)
+
         clips_new = extract_snippets(
             X,
             nt=nt,
@@ -165,23 +167,34 @@ def get_waves(ops, device=torch.device("cuda")):
 
 
 def template_centers(ops):
-    xmin, xmax, ymin, ymax = (
-        ops["xc"].min(),
-        ops["xc"].max(),
-        ops["yc"].min(),
-        ops["yc"].max(),
-    )
-
+    shank_idx = ops["kcoords"]
+    xc = ops["xc"]
+    yc = ops["yc"]
     dmin = ops["settings"]["dmin"]
     if dmin is None:
         # Try to determine a good value automatically based on contact positions.
-        dmin = np.median(np.diff(np.unique(ops["yc"])))
+        y_uniq = np.unique(yc)
+        if y_uniq.size == 1:
+            dmin = 1
+        else:
+            dmin = np.median(np.diff(np.unique(y_uniq)))
     ops["dmin"] = dmin
-    ops["yup"] = np.arange(ymin, ymax + 0.00001, dmin / 2)
-
     ops["dminx"] = dminx = ops["settings"]["dminx"]
-    nx = np.round((xmax - xmin) / (dminx / 2)) + 1
-    ops["xup"] = np.linspace(xmin, xmax, int(nx))
+
+    # Iteratively determine template placement for each shank separately.
+    yup = np.array([])
+    xup = np.array([])
+    for i in np.unique(shank_idx):
+        xc_i = xc[shank_idx == i]
+        yc_i = yc[shank_idx == i]
+        xmin, xmax, ymin, ymax = xc_i.min(), xc_i.max(), yc_i.min(), yc_i.max()
+
+        yup = np.concatenate([yup, np.arange(ymin, ymax + 0.00001, dmin / 2)])
+        nx = np.round((xmax - xmin) / (dminx / 2)) + 1
+        xup = np.concatenate([xup, np.linspace(xmin, xmax, int(nx))])
+
+    ops["yup"] = yup
+    ops["xup"] = xup
 
     # Set max channel distance based on dmin, dminx, use whichever is greater.
     if ops.get("max_channel_distance", None) is None:
@@ -266,7 +279,7 @@ def yweighted(yc, iC, adist, xy, device=torch.device("cuda")):
     return yct
 
 
-def run(ops, bfile, device=torch.device("cuda"), progress_bar=None):
+def run(ops, bfile, device=torch.device("cuda"), progress_bar=None, clear_cache=False):
     sig = ops["settings"]["min_template_size"]
     nsizes = ops["settings"]["template_sizes"]
 
@@ -326,8 +339,10 @@ def run(ops, bfile, device=torch.device("cuda"), progress_bar=None):
         miniters=200 if progress_bar else None,
         mininterval=60 if progress_bar else None,
     ):
-        X = bfile.padded_batch_to_torch(ibatch, ops)
+        if ibatch % 100 == 0:
+            log_performance(logger, "debug", f"Batch {ibatch}")
 
+        X = bfile.padded_batch_to_torch(ibatch, ops)
         xy, imax, amp, adist = template_match(X, ops, iC, iC2, weigh, device=device)
         yct = yweighted(yc, iC, adist, xy, device=device)
         nsp = len(xy)
@@ -340,10 +355,8 @@ def run(ops, bfile, device=torch.device("cuda"), progress_bar=None):
         xfeat = xsub @ ops["wPCA"].T
         tF[k : k + nsp] = xfeat.transpose(0, 1).cpu().numpy()
 
-        st[k : k + nsp, 0] = (
-            ((xy[:, 1] - nt) / ops["fs"] + ibatch * (ops["batch_size"] / ops["fs"]))
-            .cpu()
-            .numpy()
+        st[k : k + nsp, 0] = (xy[:, 1].cpu().numpy() - nt) / ops["fs"] + ibatch * (
+            ops["batch_size"] / ops["fs"]
         )
         st[k : k + nsp, 1] = yct.cpu().numpy()
         st[k : k + nsp, 2] = amp.cpu().numpy()
@@ -355,6 +368,8 @@ def run(ops, bfile, device=torch.device("cuda"), progress_bar=None):
 
         if progress_bar is not None:
             progress_bar.emit(int((ibatch + 1) / bfile.n_batches * 100))
+
+    log_performance(logger, "debug", f"Batch {ibatch}")
 
     st = st[:k]
     tF = tF[:k]

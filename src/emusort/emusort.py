@@ -4,9 +4,10 @@ start_time = datetime.now()  # include imports in time cost
 
 import sys
 
-if sys.version_info < (3, 9):
+version_req = (3, 10)
+if sys.version_info < version_req:
     sys.exit(
-        "Error: Your Python version is not supported. Please use Python 3.9 or later."
+        f"Error: Your Python version is not supported. Please use Python {version_req[0]}.{version_req[1]} or later."
     )
 
 import argparse
@@ -16,21 +17,24 @@ import os
 import platform
 import shutil
 import subprocess
+import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import Union
 
 import numpy as np
 import spikeinterface as si
-import spikeinterface.extractors as se
+import spikeinterface.extractors.neoextractors as se
+import spikeinterface.extractors.nwbextractors as nwbe
 import spikeinterface.preprocessing as spre
-import spikeinterface.sorters as ss
 from probeinterface import Probe
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
-from spikeinterface.core import write_binary_recording
+from spikeinterface.core import read_binary, write_binary_recording
+from spikeinterface.core.waveform_tools import has_exceeding_spikes
+from spikeinterface.curation import remove_excess_spikes
 from spikeinterface.exporters import export_to_phy
-from spikeinterface.qualitymetrics.misc_metrics import (
+from spikeinterface.metrics import (
     compute_amplitude_cutoffs,
     compute_firing_ranges,
     compute_firing_rates,
@@ -41,6 +45,8 @@ from spikeinterface.qualitymetrics.misc_metrics import (
 from torch.cuda import is_available
 
 from .ks4mods.si_sorter_class import KS4EMUsortSorter
+
+np.random.seed(316)
 
 
 def create_config(
@@ -250,7 +256,7 @@ def load_ephys_data(
         # If loading NWB data
         loaded_recording_list = []
         for iRec in chosen_nwb_files:
-            loaded_recording_list.append(se.read_nwb(str(iRec)))
+            loaded_recording_list.append(nwbe.read_nwb(str(iRec)))
         loaded_recording = si.append_recordings(loaded_recording_list)
     elif dataset_type == "binary":
         # get list of binary recordings
@@ -269,7 +275,7 @@ def load_ephys_data(
         loaded_recording_list = []
         for iRec in chosen_bin_or_dat_files:
             loaded_recording_list.append(
-                se.read_binary(
+                read_binary(
                     str(iRec),
                     sampling_frequency=config["Data"]["binary_sampling_rate"],
                     num_channels=config["Data"]["binary_num_channels"],
@@ -322,7 +328,7 @@ def preprocess_ephys_data(
         )
     elif len(emg_recordings_to_use) > 1 and iChanGroup > 0:
         concat_data_path = this_config["Data"]["session_folder"] / "concatenated_data"
-        loaded_recording = si.load_extractor(concat_data_path)
+        loaded_recording = si.load(concat_data_path)
     else:
         if this_config["Data"]["dataset_type"] == "openephys":
             loaded_recording = recording_obj.select_segments(emg_recordings_to_use)
@@ -346,7 +352,7 @@ def preprocess_ephys_data(
         this_config["Group"]["emg_chan_list"][iChanGroup]
     ]
     # Slice the recording to include only the specified channels
-    sliced_recording = loaded_recording.channel_slice(selected_channel_ids)
+    sliced_recording = loaded_recording.select_channels(selected_channel_ids)
     if not time_range_is_disabled:
         # Slice the recording to include only the specified time range
         sliced_recording = sliced_recording.frame_slice(
@@ -363,7 +369,11 @@ def preprocess_ephys_data(
                 )
             ),
         )
-
+    global full_config
+    si.set_global_job_kwargs(
+        n_jobs=full_config["SI"]["n_jobs"],
+        chunk_duration=full_config["SI"]["chunk_duration"],
+    )
     # Apply bandpass filter to the EMG data
     recording_filtered = spre.bandpass_filter(
         sliced_recording,
@@ -426,7 +436,7 @@ def preprocess_ephys_data(
         chans_to_be_used = recording_filtered.get_channel_ids()
     else:
         print("Bad channels being removed:\n" + str(bad_channel_ids))
-        recording_filtered = recording_filtered.channel_slice(
+        recording_filtered = recording_filtered.select_channels(
             # the below line resulted in an unintended reordering of channels, replaced with list comp
             # np.setdiff1d(recording_filtered.get_channel_ids(), bad_channel_ids)
             good_channel_ids
@@ -435,7 +445,7 @@ def preprocess_ephys_data(
     print(f"Using channels: {chans_to_be_used}")
     # Apply notch filter to the EMG data
     recording_notch = spre.notch_filter(
-        recording_filtered, freq=60, q=30
+        recording_filtered, freq=this_config["Data"]["emg_notch_freq"], q=30
     )  # Apply notch filter at 60 Hz
     # set a probe for the recording
     probe = create_probe(recording_notch)
@@ -490,8 +500,7 @@ def concatenate_emg_data(
     concat_data_path = session_folder / "concatenated_data"
     yaml = YAML()
 
-    concat_exists = concat_data_path.exists()
-    if concat_exists:
+    if concat_data_path.exists():
         last_config_file_exists = concat_data_path.joinpath("last_config.yaml").exists()
         if last_config_file_exists:
             with open(concat_data_path.joinpath("last_config.yaml")) as f:
@@ -517,11 +526,11 @@ def concatenate_emg_data(
                     "Data section of configuration file has not changed since last run, will load previous concatenated data..."
                 )
                 try:
-                    recording_concatenated = si.load_extractor(concat_data_path)
+                    recording_concatenated = si.load(concat_data_path)
                     return recording_concatenated
-                except:
+                except Exception as e:
                     print(
-                        "Failed to load previously concatenated data, re-running concatenation..."
+                        f"Failed to load previously concatenated data: {e}\nRe-running concatenation..."
                     )
                     recording_concatenated = concat_and_save(concat_data_path)
                     dump_yaml(
@@ -542,105 +551,133 @@ def concatenate_emg_data(
     return recording_concatenated
 
 
-def get_emusort_scores(we, wid):
-    ### Compute sorting quality metrics, Overall EMUsort score
-    def get_t1_scores(we):
-        ## Check Type I errors (false positives)
-        rp_contamination, _ = compute_refrac_period_violations(
-            we,
-            refractory_period_ms=1,
-            censored_period_ms=0,
-        )
-        rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
+def get_emusort_scores(analyzer, score_terms, wid):
+    import math
 
-        # num_spikes = compute_num_spikes(
-        #     we,
-        # )
-        # rp_violation_fraction_scores = 1 - np.fromiter(rp_violations.values(), int) / (
-        # 1 + np.fromiter(num_spikes.values(), int)
-        # )
-        type_I_scores = rp_contamination_scores  # rp_violation_fraction_scores
+    ### Compute sorting quality metrics, Overall EMUsort score
+    def get_t1_scores(analyzer, t1_term):
+        ## Check Type I errors (false positives)
+        subterms = []
+        if t1_term[0]:
+            rp_contamination, _ = compute_refrac_period_violations(
+                analyzer,
+                refractory_period_ms=1,
+                censored_period_ms=0,
+            )
+            rp_contamination_scores = 1 - np.fromiter(rp_contamination.values(), float)
+            subterms.append(rp_contamination_scores)
+
+        type_I_scores = math.prod(subterms)  # returns 1 if list is empty
         return type_I_scores
 
-    def get_t2_scores(we):
+    def get_t2_scores(analyzer, t2_term):
         ## Check Type II errors (false negatives)
-        # presence_ratios = compute_presence_ratios(
-        #     we, bin_duration_s=20.0, mean_fr_ratio_thresh=0.5
-        # )
-        # presence_ratio_scores = np.fromiter(presence_ratios.values(), float)
+        subterms = []
+        if t2_term[0]:
+            presence_ratios = compute_presence_ratios(
+                analyzer, bin_duration_s=20.0, mean_fr_ratio_thresh=0.5
+            )
+            presence_ratio_scores = np.fromiter(presence_ratios.values(), float)
+            subterms.append(presence_ratio_scores)
 
-        amplitude_cutoffs = compute_amplitude_cutoffs(
-            we, peak_sign="both", num_histogram_bins=32, amplitudes_bins_min_ratio=4
-        )
-        amplitude_Gaussianity_scores = 1 - np.fromiter(
-            amplitude_cutoffs.values(), float
-        )
-        denan_amplitude_Gaussianity_scores = np.nan_to_num(
-            amplitude_Gaussianity_scores,
-            nan=0,  # if nan, replace with 0 (bad score due to too few spikes)
-        )
+        if t2_term[1]:
+            amplitude_cutoffs = compute_amplitude_cutoffs(
+                analyzer,
+                # peak_sign="both",
+                num_histogram_bins=32,
+                amplitudes_bins_min_ratio=4,
+            )
+            amplitude_Gaussianity_scores = 1 - np.fromiter(
+                amplitude_cutoffs.values(), float
+            )
+            denan_amplitude_Gaussianity_scores = np.nan_to_num(
+                amplitude_Gaussianity_scores,
+                nan=0,  # if nan, replace with 0 (bad score due to too few spikes)
+            )
+            subterms.append(denan_amplitude_Gaussianity_scores)
 
-        type_II_scores = denan_amplitude_Gaussianity_scores  # * presence_ratio_scores
+        type_II_scores = math.prod(subterms)  # returns 1 if list is empty
         return type_II_scores
 
-    def get_fr_val_scores(we):
+    def get_fr_val_scores(analyzer, fr_term):
         ## Check Firing Rates Validity Against Known MU properties (200Hz sigmoid dropoff)
-        firing_rates = compute_firing_rates(
-            we,
-        )
-        firing_rate_viol_scores = 1 / (
-            1 + np.exp((np.fromiter(firing_rates.values(), float) + 1e-8) - 200)
-        )
-        firing_ranges = compute_firing_ranges(we, bin_size_s=0.5)
-        firing_range_viol_scores = 1 / (
-            1 + np.exp((np.fromiter(firing_ranges.values(), float) + 1e-8) - 200)
-        )
-        firing_rate_validity_scores = firing_rate_viol_scores * firing_range_viol_scores
+        subterms = []
+        if fr_term[0]:
+            firing_rates = compute_firing_rates(
+                analyzer,
+            )
+            firing_rate_viol_scores = 1 / (
+                1 + np.exp((np.fromiter(firing_rates.values(), float) + 1e-8) - 200)
+            )
+            subterms.append(firing_rate_viol_scores)
+        if fr_term[1]:
+            firing_ranges = compute_firing_ranges(analyzer, bin_size_s=0.5)
+            firing_range_viol_scores = 1 / (
+                1 + np.exp((np.fromiter(firing_ranges.values(), float) + 1e-8) - 200)
+            )
+            subterms.append(firing_range_viol_scores)
+
+        firing_rate_validity_scores = math.prod(subterms)  # returns 1 if list is empty
         return firing_rate_validity_scores
 
-    def get_snr_scores(we):
-        # gets ratio of largest peak to snippet standard deviation
-        snrs = compute_snrs(
-            we,
-            peak_sign="both",
-        )
-        # set sigmoid so that the score is 0.5 at 4
-        snr_scores = 1 - (1 / (1 + np.exp((np.fromiter(snrs.values(), float) - 4))))
-        # clip it 0 to 1 to prevent the plunge to negative infinity when the sd to snr ratio is > 1
-        clipped_snr_scores = np.clip(snr_scores, 0, 1)
-        return clipped_snr_scores
+    def get_snr_scores(analyzer, snr_term):
+        ## Check for SNRs that are high enough to be robustly detectable (i.e. scores high when >4 SNR)
+        subterms = []
+        if snr_term[0]:
+            # gets ratio of largest peak to snippet standard deviation
+            snrs = compute_snrs(
+                analyzer,
+                peak_sign="both",
+            )
+            snrs_array = np.fromiter(snrs.values(), float)
+            # set sigmoid so that the score is 0.5 at 4
+            sigmoidal_snr_scores = 1 - (1 / (1 + np.exp((snrs_array - 4))))
+            subterms.append(sigmoidal_snr_scores)
+        else:
+            snrs = None
 
-    def get_spike_counts(we):
-        spike_counts = np.zeros_like(we.unit_ids)
-        for iClust in we.unit_ids:
-            spike_counts[iClust] = we.get_waveforms(iClust).shape[0]
+        snr_scores = math.prod(subterms)
+        return snr_scores, snrs_array
+
+    def get_spike_counts(analyzer):
+        spike_counts = np.zeros_like(analyzer.unit_ids)
+        wv = analyzer.get_extension(extension_name="waveforms")
+
+        for iClust in analyzer.unit_ids:
+            # spike_counts[iClust] = wv_data[iClust].shape[0]
+            spike_counts[iClust] = wv.get_waveforms_one_unit(iClust).shape[0]
+            # spike_counts[iClust] = analyzer.get_waveforms(iClust).shape[0]
         return spike_counts
 
-    # get quality metric scores asynchronously
-    clipped_snr_scores = get_snr_scores(we)
-    firing_rate_validity_scores = get_fr_val_scores(we)
-    type_I_scores = get_t1_scores(we)
-    type_II_scores = get_t2_scores(we)
+    # get quality metric scores
+    type_I_scores = get_t1_scores(analyzer, score_terms["type_I"])
+    type_II_scores = get_t2_scores(analyzer, score_terms["type_II"])
+    fr_validity_scores = get_fr_val_scores(analyzer, score_terms["fr_validity"])
+    snr_scores, snrs = get_snr_scores(analyzer, score_terms["snr"])
+
+    # define terms of score
+    terms = [
+        type_I_scores,
+        type_II_scores,
+        fr_validity_scores,
+        snr_scores,
+    ]
 
     # produce overall score, accounting for all quality metrics
-    emusort_scores = (
-        clipped_snr_scores
-        * firing_rate_validity_scores
-        * type_I_scores
-        * type_II_scores
-    )
+    emusort_scores = math.prod(terms)
     emusort_score = np.nanmean(emusort_scores)
-    spike_counts = get_spike_counts(we)
+    spike_counts = get_spike_counts(analyzer)
 
     # get quality metric report string for this worker
     report = (
         "------------------------------------------------------------\n"
         f" Worker {wid} Quality Scores Report:\n"
-        f" SNR scores:\n{clipped_snr_scores.round(6)}\n"
-        f" Firing rate validity:\n{firing_rate_validity_scores.round(6)}\n"
-        f" Type I error scores:\n{type_I_scores.round(6)}\n"
-        f" Type II error scores:\n{type_II_scores.round(6)}\n"
+        f" Type I error scores:\n{'disabled' if type(type_I_scores) is int else type_I_scores.round(6)}\n"
+        f" Type II error scores:\n{'disabled' if type(type_II_scores) is int else type_II_scores.round(6)}\n"
+        f" Firing rate validity:\n{'disabled' if type(fr_validity_scores) is int else fr_validity_scores.round(6)}\n"
+        f" SNR scores:\n{'disabled' if type(snr_scores) is int else snr_scores.round(6)}\n"
         f" EMUsort scores:\n{emusort_scores.round(6)}\n"
+        f" SNRs:\n {'disabled' if snrs is None else snrs.round(6)}\n"
         f" Spike counts:\n{spike_counts}\n"
         "------------------------------------------------------------\n"
         f" Worker {wid} Overall EMUsort score: {emusort_score:.3f}\n"
@@ -648,19 +685,20 @@ def get_emusort_scores(we, wid):
     )
 
     return (
-        clipped_snr_scores,
-        firing_rate_validity_scores,
-        type_I_scores,
-        type_II_scores,
+        "disabled" if type(type_I_scores) is int else type_I_scores.tolist(),
+        "disabled" if type(type_II_scores) is int else type_II_scores.tolist(),
+        "disabled" if type(fr_validity_scores) is int else fr_validity_scores.tolist(),
+        "disabled" if type(snr_scores) is int else snr_scores.tolist(),
         emusort_scores,
         emusort_score,
+        "disabled" if snrs is None else snrs.tolist(),
         spike_counts,
         report,
     )
 
 
 def write_rec_and_params(
-    we,
+    analyzer,
     processed,
     sorted_folder,
     this_sorting,
@@ -669,7 +707,7 @@ def write_rec_and_params(
     dtype=None,
     **job_kwargs,
 ):
-    def write_score_tsv(we, this_config, tsv_output_folder, processed=False):
+    def write_score_tsv(analyzer, this_config, tsv_output_folder, processed=False):
         score_tsv_data = []
         if processed:
             uids = []
@@ -684,10 +722,10 @@ def write_rec_and_params(
                     uids.append(int(entry["si_unit_id"]))
                 uids = np.fromiter(uids, int)
         else:
-            uids = we.unit_ids
+            uids = analyzer.unit_ids
 
         for i, uid in enumerate(uids):
-            idx = np.nonzero(we.unit_ids == uid)[0][0]
+            idx = np.nonzero(analyzer.unit_ids == uid)[0][0]
             score_tsv_data.append(
                 {
                     "cluster_id": i if processed else uid,
@@ -707,15 +745,15 @@ def write_rec_and_params(
 
     # save dat file
     if dtype is None:
-        if we.has_recording():
-            dtype = we.recording.get_dtype()
+        if analyzer.has_recording():
+            dtype = analyzer.recording.get_dtype()
         else:
-            dtype = we.dtype
+            dtype = analyzer.dtype
 
-    if we.has_recording():
+    if analyzer.has_recording():
         rec_path = sorted_folder / "recording.dat"
         write_binary_recording(
-            we.recording, file_paths=rec_path, dtype=dtype, **job_kwargs
+            analyzer.recording, file_paths=rec_path, dtype=dtype, **job_kwargs
         )
     else:  # don't save recording.dat
         print("Recording will not be copied since waveform extractor is recordingless.")
@@ -738,16 +776,18 @@ def write_rec_and_params(
         f.write(f"dtype = '{dtype_str}'\n")
         f.write("offset = 0\n")
         f.write(f"sample_rate = {this_sorting.get_sampling_frequency()}\n")
-        f.write(f"hp_filtered = {we.is_filtered()}")
+        f.write(f"hp_filtered = {analyzer.is_filtered()}")
 
     # write EMUsort score tsv for use with Phy
-    write_score_tsv(we, this_config, sorted_folder)
+    write_score_tsv(analyzer, this_config, sorted_folder)
 
     if (
         this_config["KS"]["keep_good_only"]
         or this_config["SI"]["cluster_score_threshold"]
     ):
-        write_score_tsv(we, this_config, sorted_folder / "processed_output", processed)
+        write_score_tsv(
+            analyzer, this_config, sorted_folder / "processed_output", processed
+        )
         # write a copy of the params.py file with an updated relative path
         if use_relative_path:
             good_only_rec_line = "dat_path = r'../recording.dat'\n"
@@ -784,81 +824,137 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     print(
         f"Worker {wid} extracting waveforms with nt={nt} at fs={sampling_frequency} Hz (ms_before=ms_after={np.round(ms_buffer, 3)} ms)."
     )
+    if this_config["Data"]["dataset_type"] == "binary":
+        return_in_uV = False
+    else:
+        return_in_uV = True
 
     try:
         # Extract waveforms
-        we = await asyncio.to_thread(
-            si.extract_waveforms,
-            this_job["recording"],
+        # analyzer = await asyncio.to_thread(
+        #     si.extract_waveforms,
+        #     this_job["recording"],
+        #     this_sorting,
+        #     mode="memory",
+        #     sparse=False,
+        #     # waveforms_folder,
+        #     # ms_before=ms_buffer,
+        #     # ms_after=ms_buffer,
+        #     # max_spikes_per_unit=None,
+        #     # overwrite=True,
+        # )
+
+        # create sorting analyzer instance
+        analyzer = si.create_sorting_analyzer(
             this_sorting,
-            # waveforms_folder,
+            this_job["recording"],
             mode="memory",
-            ms_before=ms_buffer,
-            ms_after=ms_buffer,
-            max_spikes_per_unit=None,
-            # overwrite=True,
             sparse=False,
+            return_in_uV=return_in_uV,
         )
-        removed_excess_spikes = False
+        # removed_excess_spikes = False
     except ValueError as e:
-        import spikeinterface.curation as scur
-
         print("Error extracting waveforms:", e)
-
-        remove_excess_spikes_sorting = scur.remove_excess_spikes(
+        print(
+            f"Removing excess spikes detected beyond recording time bounds for worker {wid}"
+        )
+        remove_excess_spikes_sorting = remove_excess_spikes(
             this_sorting, this_job["recording"]
         )
-        we = await asyncio.to_thread(
-            si.extract_waveforms,
-            this_job["recording"],
+        # analyzer = await asyncio.to_thread(
+        #     si.extract_waveforms,
+        #     this_job["recording"],
+        #     remove_excess_spikes_sorting,
+        #     mode="memory",
+        #     sparse=False,
+        #     # waveforms_folder,
+        #     # ms_before=ms_buffer,
+        #     # ms_after=ms_buffer,
+        #     # max_spikes_per_unit=None,
+        #     # overwrite=True,
+        # )
+
+        # create sorting analyzer instance
+        analyzer = si.create_sorting_analyzer(
             remove_excess_spikes_sorting,
-            # waveforms_folder,
+            this_job["recording"],
             mode="memory",
-            ms_before=ms_buffer,
-            ms_after=ms_buffer,
-            max_spikes_per_unit=None,
-            # overwrite=True,
             sparse=False,
+            return_in_uV=return_in_uV,
         )
-        removed_excess_spikes = True
+        # removed_excess_spikes = True
+    await asyncio.to_thread(
+        analyzer.compute,
+        "noise_levels",
+        method="mad",
+    )
+    await asyncio.to_thread(
+        analyzer.compute,
+        {
+            "random_spikes": {"method": "all"},
+            "waveforms": {"ms_before": ms_buffer, "ms_after": ms_buffer},
+            "templates": {"operators": ["average", "std", "median"]},
+            "spike_amplitudes": {"peak_sign": "both"},
+        },
+    )
+
+    # await asyncio.to_thread(
+    #     analyzer.compute,
+    #     "amplitude_scalings",
+    #     max_dense_channels=None,
+    #     delta_collision_ms=ms_buffer,
+    # )
+
     print(f"Worker {wid} finished extracting waveforms, computing quality metrics...")
 
-    # Compute quality metrics asynchronously
+    # Compute quality metrics
     (
-        snr_scores,
-        firing_rate_validity_scores,
         type_I_scores,
         type_II_scores,
+        firing_rate_validity_scores,
+        snr_scores,
         emusort_scores,
         emusort_score,
+        snrs,
         spike_counts,
         report,
-    ) = get_emusort_scores(we, wid)
+    ) = get_emusort_scores(analyzer, this_config["Sorting"]["score_terms"], wid)
 
     if this_config["SI"]["cluster_score_threshold"] > 0:
         thresholded_cluster_scores = (
             emusort_scores > this_config["SI"]["cluster_score_threshold"]
         )
         clusters_to_keep = np.nonzero(thresholded_cluster_scores)[0]
+        curated_analyzer = analyzer.select_units(clusters_to_keep)
+        # if has_exceeding_spikes(curated_sorting, this_job["recording"]):
+        #     curated_sorting = remove_excess_spikes(curated_sorting)
+        #     print("Removing excess spikes from clusters filtered by score")
 
-        if removed_excess_spikes:
-            curated_sorting = remove_excess_spikes_sorting.select_units(
-                clusters_to_keep
-            )
-        else:
-            curated_sorting = this_sorting.select_units(clusters_to_keep)
-
-        we_proc = await asyncio.to_thread(
-            si.extract_waveforms,
-            this_job["recording"],
-            curated_sorting,
-            # waveforms_folder,
-            mode="memory",
-            ms_before=ms_buffer,
-            ms_after=ms_buffer,
-            # overwrite=True,
-            sparse=False,
+        # analyzer_proc = si.create_sorting_analyzer(
+        #     curated_sorting,
+        #     this_job["recording"],
+        #     mode="memory",
+        #     sparse=False,
+        #     return_in_uV=return_in_uV,
+        # )
+        await asyncio.to_thread(
+            curated_analyzer.compute,
+            {
+                "random_spikes": {"method": "all"},
+                "waveforms": {"ms_before": ms_buffer, "ms_after": ms_buffer},
+                "templates": {"operators": ["average", "std", "median"]},
+                "spike_amplitudes": {"peak_sign": "both"},
+            },
         )
+
+        # this also done because some metrics need it
+        # try:
+
+        # emg_chan_noise_levels = analyzer_proc.compute("noise_levels", {"return_in_uV": True, "method": "mad"})
+        # except ValueError # usually happens with binary dataset type
+        # noise_params = dict(return_in_uV=False, method="mad")
+        # analyzer_proc.compute("noise_levels", **noise_params
+
         # update the subsampled scores and report
         # snr_scores = snr_scores[clusters_to_keep]
         # firing_rate_validity_scores = firing_rate_validity_scores[clusters_to_keep]
@@ -881,26 +977,25 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         # spike_counts = spike_counts[clusters_to_keep]
 
     # get channel noise levels
-    try:
-        emg_chan_noise_levels = si.get_noise_levels(
-            we.recording, return_scaled=True, method="mad"
-        )
-    # handle the error for recording types without scaling information (such as binary recordings)
-    except ValueError:
-        emg_chan_noise_levels = si.get_noise_levels(
-            we.recording, return_scaled=False, method="mad"
-        )
-
-    this_config["emg_chan_noise"] = emg_chan_noise_levels.tolist()
+    # try:
+    #     emg_chan_noise_levels = si.get_noise_levels(
+    #         analyzer.recording, return_scaled=True, method="mad"
+    #     )
+    # # handle the error for recording types without scaling information (such as binary recordings)
+    # except ValueError:
+    #     emg_chan_noise_levels = si.get_noise_levels(
+    #         analyzer.recording, return_scaled=False, method="mad"
+    #     )
+    noise_levels_ext = analyzer.get_extension(extension_name="noise_levels")
+    this_config["emg_chan_noise"] = noise_levels_ext.get_data().tolist()
     # add Results section to this_config
     this_config["Results"] = {}
-    this_config["Results"]["snr_scores"] = snr_scores.tolist()
-    this_config["Results"]["firing_rate_validity_scores"] = (
-        firing_rate_validity_scores.tolist()
-    )
-    this_config["Results"]["type_I_scores"] = type_I_scores.tolist()
-    this_config["Results"]["type_II_scores"] = type_II_scores.tolist()
+    this_config["Results"]["type_I_scores"] = type_I_scores
+    this_config["Results"]["type_II_scores"] = type_II_scores
+    this_config["Results"]["firing_rate_validity_scores"] = firing_rate_validity_scores
+    this_config["Results"]["snr_scores"] = snr_scores
     this_config["Results"]["emusort_scores"] = emusort_scores.tolist()
+    this_config["Results"]["snrs"] = snrs
     this_config["Results"]["spike_counts"] = spike_counts.tolist()
     this_config["Results"]["num_clusters"] = len(
         this_config["Results"]["emusort_scores"]
@@ -918,10 +1013,13 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         or this_config["SI"]["cluster_score_threshold"]
     ):
         phy_proc_output_folder = sorted_folder / "processed_output"
-
+        if not this_config["SI"]["cluster_score_threshold"]:
+            # if only "keep_good_only", then non-"good" units were already
+            # removed for analyzer in spikeinterface/extractors/phykilosortextractors.py
+            curated_analyzer = analyzer
         await asyncio.to_thread(
             export_to_phy,
-            we_proc,
+            curated_analyzer,
             output_folder=phy_proc_output_folder,
             compute_pc_features=False,
             copy_binary=False,
@@ -931,10 +1029,12 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         # movetree(phy_output_folder, sorted_folder)
         # shutil.rmtree(phy_output_folder, ignore_errors=True)
         processed = True
+    else:
+        processed = False
 
     await asyncio.to_thread(
         write_rec_and_params,
-        we,
+        analyzer,
         processed,
         sorted_folder,
         this_sorting,
@@ -1054,24 +1154,110 @@ def run_KS_sorting(job_list, these_configs):
     - None
     """
 
+    def run_sorter_local(
+        sorter_name,
+        recording,
+        folder=None,
+        remove_existing_folder=True,
+        verbose=False,
+        raise_error=True,
+        with_output=True,
+        **sorter_params,
+    ):
+        """
+        Runs a sorter locally.
+
+        Parameters
+        ----------
+        sorter_name : str
+            The sorter name
+        recording : RecordingExtractor
+            The recording extractor to be spike sorted
+        folder : str or Path
+            Path to output folder. If None, a folder is created in the current directory
+        remove_existing_folder : bool, default: True
+            If True and output_folder exists yet then delete
+        delete_output_folder : bool, default: False
+            If True, output folder is deleted
+        verbose : bool, default: False
+            If True, output is verbose
+        raise_error : bool, default: True
+            If True, an error is raised if spike sorting fails.
+            If False, the process continues and the error is logged in the log file
+        with_output : bool, default: True
+            If True, the output Sorting is returned as a Sorting
+        **sorter_params : keyword args
+        """
+        from spikeinterface.sorters import sorter_dict
+        from torch.cuda import set_device
+
+        # suppress warning about pkg_resources being slated for deprecation,
+        # which is imported in __init__.py of kilosort4 v4.0.18
+        warnings.simplefilter("ignore", UserWarning)
+
+        global full_config
+        si.set_global_job_kwargs(
+            n_jobs=full_config["SI"]["n_jobs"],
+            chunk_duration=full_config["SI"]["chunk_duration"],
+        )
+
+        set_device(sorter_params["torch_device"])  # set GPU in worker state
+
+        sorter_dict[KS4EMUsortSorter.sorter_name] = KS4EMUsortSorter
+
+        SorterClass = sorter_dict[sorter_name]
+
+        # only classmethod call not instance (stateless at instance level but state is in folder)
+        folder = SorterClass.initialize_folder(
+            recording, folder, verbose, remove_existing_folder
+        )
+        SorterClass.set_params_to_folder(recording, folder, sorter_params, verbose)
+        # This writes parameters and recording to binary and could ideally happen in the host
+        SorterClass.setup_recording(recording, folder, verbose=verbose)
+        # This NEEDS to happen in the docker because of dependencies
+        SorterClass.run_from_folder(folder, raise_error, verbose)
+        if with_output:
+            sorting = SorterClass.get_result_from_folder(
+                folder, register_recording=True, sorting_info=True
+            )
+        else:
+            sorting = None
+
+        return sorting
+
     ## job_list is of below structure:
     # job_list = [
     #     {
     #         "sorter_name": "kilosort4",
     #         "recording": recording_list[i],
-    #         "output_folder": these_configs[i]["Sorting"]["sorted_folder"],
+    #         "folder": these_configs[i]["Sorting"]["sorted_folder"],
     #         **this_config["KS"],
     #     }
 
-    # Assign class definition
-    ss.sorter_dict[KS4EMUsortSorter.sorter_name] = KS4EMUsortSorter
     # Run spike sorting
-    sortings = ss.run_sorter_jobs(
-        job_list=job_list,
-        engine="joblib",
-        engine_kwargs={"n_jobs": these_configs[0]["Sorting"]["num_KS_jobs"]},
-        return_output=True,
-    )
+    # sortings = ss.run_sorter_jobs(
+    #     job_list=job_list,
+    #     engine="joblib",
+    #     engine_kwargs={
+    #         "n_jobs": these_configs[0]["Sorting"]["num_KS_jobs"],
+    #         "backend": "loky",
+    #     },
+    #     return_output=True,
+    # )
+
+    from joblib import Parallel, delayed
+
+    # def init_worker():
+    #     # Assign class definition
+    #     # ss.sorter_full_list.append(KS4EMUsortSorter)
+    #     import spikeinterface.sorters as ss
+
+    #     ss.sorter_dict[KS4EMUsortSorter.sorter_name] = KS4EMUsortSorter
+    sortings = Parallel(
+        n_jobs=these_configs[0]["Sorting"]["num_KS_jobs"],
+        backend="loky",
+        # initializer=init_worker,
+    )(delayed(run_sorter_local)(**kwargs) for kwargs in job_list)
 
     # Now extract and write the sorting results to each sorted_folder
     # try:
@@ -1156,6 +1342,7 @@ def main():
 
     # Load the configuration file
     yaml = YAML()
+    global full_config
     full_config = yaml.load(config_file_path)
 
     # Prepare common configuration file, accounting for section titles, Data, Sorting, and Group
@@ -1166,16 +1353,20 @@ def main():
         }
     )
 
-    si.set_global_job_kwargs(
-        n_jobs=1,
-        chunk_duration=full_config["SI"]["chunk_duration"],
-    )
-
     # below are checks of the configuration file to avoid downstream errors
     assert not full_config["KS"]["nblocks"], "nblocks must be False for EMUsort"
     assert not full_config["KS"]["do_correction"], (
         "do_correction must be False for EMUsort"
     )
+    if (
+        full_config["Sorting"]["do_KS_param_sweep"]
+        and not full_config["SI"]["n_jobs"] == 1
+    ):
+        print(
+            "SI n_jobs must be 1 if do_KS_param_sweep is enabled, to avoid error with threading that halts execution. Overwriting to 1."
+        )
+        full_config["SI"]["n_jobs"] = 1  # overwrite value in memory to be 1
+
     # assert full_config["KS"]["do_CAR"] == False, "do_CAR must be False for EMUsort"
 
     # EMG Preprocessing and Spike Sorting
@@ -1373,7 +1564,7 @@ def main():
                 this_config["KS"]["nearest_templates"] = min(
                     this_config["num_chans"], this_config["KS"]["nearest_templates"]
                 )  # do not let nearest_templates exceed the number of channels
-                if this_config["KS"]["torch_device"].contains("cuda:"):
+                if "cuda:" in this_config["KS"]["torch_device"]:
                     print(
                         f"Resetting torch_device from {this_config['KS']['torch_device']} to 'auto'. Use GPU_to_use to control GPU choice."
                     )
@@ -1398,7 +1589,7 @@ def main():
                 {
                     "sorter_name": KS4EMUsortSorter.sorter_name,
                     "recording": recording_list[wid],
-                    "output_folder": these_configs[wid]["Sorting"]["sorted_folder"],
+                    "folder": these_configs[wid]["Sorting"]["sorted_folder"],
                     **these_configs[wid]["KS"],
                 }
                 for wid in range(total_KS_jobs)

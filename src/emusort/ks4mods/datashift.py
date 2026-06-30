@@ -2,10 +2,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-import numpy as np
-import torch
-from scipy.ndimage import gaussian_filter
 from scipy.sparse import coo_matrix
+import numpy as np
+from scipy.ndimage import gaussian_filter
+import torch
 
 from ..ks4mods import spikedetect
 
@@ -141,7 +141,7 @@ def align_block2(F, ysamp, ops, device=torch.device("cuda")):
     # get 1D upsampling matrix
     Kn = kernelD(dt, dtup, 1)
 
-    # smooth the dot-product matrices across blocks, batches and across vertical offsets
+    # smooth the dot-product matrices across correlation, batches, and vertical offsets
     dcs = gaussian_filter(dcs, ops["drift_smoothing"])
 
     # for each block, upsample the dot-product matrix and find new max
@@ -187,7 +187,7 @@ def kernel2D(x, y, sig=1):
     return Kn
 
 
-def run(ops, bfile, device=torch.device("cuda"), progress_bar=None):
+def run(ops, bfile, device=torch.device("cuda"), progress_bar=None, clear_cache=False):
     """this step computes a drift correction model
     it returns vertical correction amplitudes for each batch, and for multiple blocks in a batch if nblocks > 1.
     """
@@ -198,7 +198,9 @@ def run(ops, bfile, device=torch.device("cuda"), progress_bar=None):
         return ops, None
 
     # the first step is to extract all spikes using the universal templates
-    st, _, ops = spikedetect.run(ops, bfile, device=device, progress_bar=progress_bar)
+    st, _, ops = spikedetect.run(
+        ops, bfile, device=device, progress_bar=progress_bar, clear_cache=clear_cache
+    )
 
     # spikes are binned by amplitude and y-position to construct a "fingerprint" for each batch
     F, ysamp = bin_spikes(ops, st)

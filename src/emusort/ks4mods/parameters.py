@@ -1,5 +1,6 @@
 import numpy as np
 
+
 # Format for parameter specification:
 # parameter: {
 #     'gui_name': text displayed next to edit box in GUI
@@ -139,6 +140,40 @@ EXTRA_PARAMETERS = {
             for filtering.
             """,
     },
+    "shift": {
+        "gui_name": "shift",
+        "type": float,
+        "min": -np.inf,
+        "max": np.inf,
+        "exclude": [],
+        "default": None,
+        "step": "data",
+        "description": """
+            Scalar shift to apply to data before all other operations. In most
+            cases this should be left as None, but may be necessary for float32
+            data for example. If needed, `shift` and `scale` should be set such
+            that data is roughly in the range -100 to +100.
+            
+            If set, data will be `data = data*scale + shift`.
+            """,
+    },
+    "scale": {
+        "gui_name": "scale",
+        "type": float,
+        "min": -np.inf,
+        "max": np.inf,
+        "exclude": [],
+        "default": None,
+        "step": "data",
+        "description": """
+            Scaling factor to apply to data before all other operations. In most
+            cases this should be left as None, but may be necessary for float32
+            data for example. If needed, `shift` and `scale` should be set such
+            that data is roughly in the range -100 to +100.
+            
+            If set, data will be `data = data*scale + shift`.
+            """,
+    },
     ### PREPROCESSING
     "artifact_threshold": {
         "gui_name": "artifact threshold",
@@ -178,6 +213,18 @@ EXTRA_PARAMETERS = {
             Number of nearby channels used to estimate the whitening matrix.
             """,
     },
+    "highpass_cutoff": {
+        "gui_name": "highpass cutoff",
+        "type": float,
+        "min": 0,
+        "max": np.inf,
+        "exclude": [],
+        "default": 300,
+        "step": "preprocessing",
+        "description": """
+            Critical frequency for highpass Butterworth filter applied to data.
+            """,
+    },
     "binning_depth": {
         "gui_name": "binning_depth",
         "type": float,
@@ -213,9 +260,10 @@ EXTRA_PARAMETERS = {
         "step": "preprocessing",
         "description": """
             Amount of gaussian smoothing to apply to the spatiotemporal drift
-            estimation, for x,y,time axes in units of registration blocks
-            (for x,y axes) and batch size (for time axis). The x,y smoothing has
-            no effect for `nblocks = 1`.
+            estimation, for correlation, time (units of registration blocks),
+            and y (units of batches) axes. The y smoothing has no effect
+            for `nblocks = 1`. Adjusting smoothing for the correlation axis
+            is not recommended.
             """,
     },
     "remove_chan_delays": {
@@ -478,17 +526,21 @@ EXTRA_PARAMETERS = {
             """,
     },
     ### POSTPROCESSING
-    "duplicate_spike_bins": {
-        "gui_name": "duplicate spike bins",
-        "type": int,
+    "duplicate_spike_ms": {
+        "gui_name": "duplicate spike ms",
+        "type": float,
         "min": 0,
         "max": np.inf,
         "exclude": [],
-        "default": 7,
+        "default": 0.25,
         "step": "postprocessing",
         "description": """
-            Number of bins for which subsequent spikes from the same cluster are
+            Time in ms for which subsequent spikes from the same cluster are
             assumed to be artifacts. A value of 0 disables this step.
+
+            NOTE: this was formerly handled by `duplicate_spike_bins`, which has
+            been deprecated. The new default of 0.25ms is equivalent to the old
+            default of 7 bins for a 30kHz sampling rate.
             """,
     },
 }
