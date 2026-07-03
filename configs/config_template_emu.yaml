@@ -17,8 +17,7 @@ Data:
     emg_passband: # low and high passband frequencies for emg data, in Hz
         - 250
         - 5000
-    emg_notch_freq: # frequency for notch filter to apply to emg data, in Hz
-        - 60
+    emg_notch_freq: 60 # frequency for notch filter to apply to emg data, in Hz
     time_range: # start and end times to slice along time, set both to 0 to use all data
         - 0
         - 0
@@ -113,4 +112,4 @@ SI:
     n_jobs: 1 # Number of parallel jobs for spikeinterface functions. Can speed up single runs, ignored if do_KS_param_sweep is True to avoid hanging issues.
     chunk_duration: '20s' # Chunk duration in seconds if float or with units if str (e.g. '20s', '500ms')
     max_concurrent_tasks: 5 # Batch size to perform asynchronous disk reads/writes. Higher is generally faster, with the limit at the number of parameter sweep combinations, but lower can be more stable.
-    cluster_score_threshold: 0 # Minimum emusort score required to keep a cluster, set 0 to disable
+    cluster_score_threshold: 0.95 # Minimum emusort score required to save a cluster in output_folder/processed_output (0.95 recommended, set 0 to disable)

@@ -4,10 +4,10 @@ start_time = datetime.now()  # include imports in time cost
 
 import sys
 
-version_req = (3, 10)
-if sys.version_info < version_req:
+version_min_req = (3, 10)
+if sys.version_info < version_min_req:
     sys.exit(
-        f"Error: Your Python version is not supported. Please use Python {version_req[0]}.{version_req[1]} or later."
+        f"Error: Your Python version is not supported. Please use Python {version_min_req[0]}.{version_min_req[1]} or later."
     )
 
 import argparse
@@ -1048,7 +1048,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
 
     # Create timestamp with microsecond precision to prevent duplicate folder names
     time_stamp_us = datetime.now().strftime("%Y%m%d_%H%M%S%f")
-
+    this_config["datestring"] = time_stamp_us
     # build params_suffix as a string without trailing underscore
     if this_config["Sorting"]["do_KS_param_sweep"] == 1:
         param_strings = [

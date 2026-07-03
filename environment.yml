@@ -30,7 +30,7 @@ dependencies:
   - pyqt5-sip
   - pyqtgraph
   - pyqtwebengine
-  - python>=3.9,<3.12 # phy gui makes py311 the maximum, due to imp dependency
+  - python>3.9,<3.12 # phy gui makes py311 the maximum, due to imp dependency
   - pytorch-gpu
   - ruamel.yaml
   - scikit-learn>1.3.2
