@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - v1.1.0
+    tags:
+      - 'v*'
+
 
 jobs:
   build:
+    if: startsWith(github.ref, 'refs/tags/')
     name: Build distribution
     strategy:
       matrix:
