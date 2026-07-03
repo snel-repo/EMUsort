@@ -1,4 +1,4 @@
-<img width="1024px" style="max-width: 50%" alt="stylized, electrified emu before an array of white waveforms" src="images/emu_voltage2.png"/>
+<img width="1024px" style="max-width: 50%" alt="stylized, electrified emu before an array of white motor unit action potential waveforms" src="https://raw.githubusercontent.com/snel-repo/EMUsort/refs/heads/main/images/emu_voltage2.png"/>
 
 # Enhanced Motor Unit sorter (EMUsort)
 
@@ -159,11 +159,11 @@ Items #2-4, will be generated automatically inside the provided session folder.
 
 #### Intan, NWB, Blackrock, and Binary datasets:
 
-![Alt text](images/folder_tree_structure.png)
+![Alt text](https://raw.githubusercontent.com/snel-repo/EMUsort/refs/heads/main/images/folder_tree_structure.png)
 
 #### Open Ephys datasets:
 
-![Alt text](images/OE_folder_tree_structure.png)
+![Alt text](https://raw.githubusercontent.com/snel-repo/EMUsort/refs/heads/main/images/OE_folder_tree_structure.png)
 
 ### EMUsort Commands
 
