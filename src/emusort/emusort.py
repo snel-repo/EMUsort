@@ -1245,14 +1245,14 @@ def run_KS_sorting(job_list, these_configs):
     #     return_output=True,
     # )
 
-    from joblib import Parallel, delayed
-
     # def init_worker():
     #     # Assign class definition
     #     # ss.sorter_full_list.append(KS4EMUsortSorter)
     #     import spikeinterface.sorters as ss
-
     #     ss.sorter_dict[KS4EMUsortSorter.sorter_name] = KS4EMUsortSorter
+
+    from joblib import Parallel, delayed
+
     sortings = Parallel(
         n_jobs=these_configs[0]["Sorting"]["num_KS_jobs"],
         backend="loky",

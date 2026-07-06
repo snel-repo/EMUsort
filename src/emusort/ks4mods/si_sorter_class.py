@@ -34,7 +34,7 @@ class KS4EMUsortSorter(BaseSorter):
     }
 
     _si_params_description = {
-        "do_CAR": "If True, common average reference is performed. Default is True. (run_kilosrt parameter)",
+        "do_CAR": "If True, common average reference is performed. Default is True. (run_kilosort parameter)",
         "invert_sign": "Invert the sign of the data. Default value: False. (run_kilosort parameter)",
         "save_extra_vars": "If True, additional kwargs are saved to the output. Default is False. (run_kilosort parameter)",
         "save_preprocessed_copy": "Save a pre-processed copy of the data (including drift correction) to temp_wh.dat in the results directory and format Phy output to use that copy of the data. (run_kilosort parameter)",
@@ -472,6 +472,8 @@ class KS4EMUsortSorter(BaseSorter):
             # only delete dat file if it was created by the wrapper
             if (sorter_output_folder / "recording.dat").is_file():
                 (sorter_output_folder / "recording.dat").unlink()
+
+        logging.shutdown()  # need to release log file I/O so it can be moved later
 
     @classmethod
     def _get_result_from_folder(cls, sorter_output_folder):
