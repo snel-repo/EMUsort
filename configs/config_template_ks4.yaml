@@ -17,6 +17,7 @@ Data:
     emg_passband: # low and high passband frequencies for emg data, in Hz
         - 250
         - 5000
+    emg_notch_freq: 60 # frequency for notch filter to apply to emg data, in Hz
     time_range: # start and end times to slice along time, set both to 0 to use all data
         - 0
         - 0
@@ -41,11 +42,16 @@ Sorting:
     linked_params_for_sweep: # list of lists of strings (parameter keys from KS section)
         # some parameters should be linked to avoid bad combinations and reduce overall run count
         # for linked parameters, only matching indexes will be taken as a valid combination
-        # combinations of different indexes for linked parameters will not tried
+        # combinations of different indexes for linked parameters will not be tried
         # so, the first indexes of each linked parameter will be used as a combination, then all the second indexes and so on
         # this allows explicit combinations to be set for linked parameters
         # leave it blank to disable
             - [Th_universal,Th_learned]
+    score_terms: # dictionary of lists containing booleans for each term of the EMUsort scoring function
+        type_I: [True] # switch for type I error score component: [rp_violation]
+        type_II: [True, True] # switch for type II error score components: [presence_ratio, amplitude_cutoff]
+        fr_validity: [True, True] # switch for firing rate validity score component: [fr_rate, fr_range]
+        snr: [True] # switch for SNR score component: [snr]
 
 # Channel Group Parameters
 # channel groups are sorted individually and sequentially
@@ -94,15 +100,16 @@ KS:
     acg_threshold: 0.2
     ccg_threshold: 0.25
     cluster_downsampling: 20
-    cluster_pcs: 64
-    duplicate_spike_bins: 15
+    duplicate_spike_ms: 0.5
     do_correction: false
     keep_good_only: false
-    save_extra_kwargs: false
+    save_extra_vars: false
     skip_kilosort_preprocessing: false
     torch_device: auto # Used to select the torch device for spike sorting. Can be "auto"/"cuda"/"cpu". Use "auto" if do_KS_param_sweep is True
 
 # SpikeInterface parameters
 SI:
+    n_jobs: 1 # Number of parallel jobs for spikeinterface functions. Can speed up single runs, ignored if do_KS_param_sweep is True to avoid hanging issues.
     chunk_duration: '20s' # Chunk duration in seconds if float or with units if str (e.g. '20s', '500ms')
-    max_concurrent_tasks: 5 # batch size to perform asynchronous disk reads/writes. Higher is generally faster, with the limit at the number of parameter sweep combinations, but lower can be more stable.
+    max_concurrent_tasks: 5 # Batch size to perform asynchronous disk reads/writes. Higher is generally faster, with the limit at the number of parameter sweep combinations, but lower can be more stable.
+    cluster_score_threshold: 0.95 # Minimum emusort score required to save a cluster in output_folder/processed_output (0.95 recommended, set 0 to disable)

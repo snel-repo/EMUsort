@@ -1,7 +1,7 @@
 # emusort/__init__.py
 
 """
-EMUsort: A command-line tool for high-performance spike sorting of multi-channel, single-unit electromyography
+EMUsort: A command line tool for high performance spike sorting of multichannel, single unit electromyography
 """
 
 import subprocess

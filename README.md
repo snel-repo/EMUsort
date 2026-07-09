@@ -1,4 +1,4 @@
-<img width="1024px" style="max-width: 50%" alt="stylized, electrified emu before an array of white waveforms" src="images/emu_voltage2.png"/>
+<img width="1024px" style="max-width: 50%" alt="stylized, electrified emu before an array of white motor unit action potential waveforms" src="https://raw.githubusercontent.com/snel-repo/EMUsort/refs/heads/main/images/emu_voltage2.png"/>
 
 # Enhanced Motor Unit sorter (EMUsort)
 
@@ -22,14 +22,14 @@
   - Windows: >=452.39
 - CUDA Toolkit (Automatically installed with the environment):
   - \>=11.3
+- Python (Automatically installed with the environment)
+  - \>=3.10
 
 ### Cloning from GitHub
 
 Clone the repository recursively onto your machine (for example, in the home directory)
 
-    git clone --recurse-submodules https://github.com/snel-repo/EMUsort.git
-
-> If you accidentally ran `git clone` without `--recurse-submodules`, just delete the entire `EMUsort` folder and rerun the above command
+    git clone https://github.com/snel-repo/EMUsort.git
 
 After cloning is complete, you will need to configure a uv, micromamba, or conda environment.
 
@@ -37,15 +37,11 @@ After cloning is complete, you will need to configure a uv, micromamba, or conda
 
 To update your `EMUsort` clone to the latest version, you can pull updates from the main repository. To do so, navigate into the folder where `EMUsort` was cloned and run:
 
-    git pull --recurse-submodules
-    git submodule update
+    git pull
 
-If you used the `uv` method to install previously, and the submodules have been changed in the latest updates, you may need to run the below commands to update the submodules and reinstall those:
-
->**Windows only:** Replace the `sync` command below with `uv sync --extra full --python 3.9`
+If you used the `uv` method to install previously, and you have trouble updating, you may need to run the below commands to clear the `uv` cache before syncing:
 
     uv cache clean
-    uv pip uninstall kilosort spikeinterface
     uv sync --extra full
 
 If you are updating a previous EMUsort installation, you may encounter issues with the configuration file (if it's structure changed in the latest update). If this happens, you may want to backup your configuration file somewhere, then you can reset it to the new default configuration file by running:
@@ -68,9 +64,6 @@ Follow the steps and execute the commands below to install and manage EMUsort wi
 Then either restart the terminal or execute the command suggested in the terminal to enable using `uv` in the terminal. Next, create the environment and install all dependencies including Phy, using `uv`:
 
     cd /path/to/repo_folder # go into the EMUsort clone location  
->**Windows only:** Windows seems most stable using Python version 3.9, so be sure to use the `--python 3.9` option with the below command.
->For example: `uv sync --extra full --python 3.9`.
->Other Python versions can be tried afterwards, if necessary.
 
 Use `uv` to execute the installation with the "full" option, which will install Kilosort4 (with modifications), SpikeInterface, PyTorch, and Phy GUI. See `pyproject.toml` for more "--extra" options.
 
@@ -95,11 +88,10 @@ Afterwards, make sure to either restart the terminal or [initialize](https://mam
 
 > **Windows only:** During micromamba environment creation, the conda packages usually work, but you may get an error at the end related to the `pip` packages not install installing.
 > If this happened, it's likely micromamba worked, but the `pip` packages need manual installation. This is a Windows problem. So, go ahead and activate the micromamba environment you just created (`micromamba activate emusort`), and run the following, one by one:
-> `pip install -e ./src/emusort/spikeinterface`
-> `pip install -e ./src/emusort/Kilosort4`
+> `pip install -e spikeinterface[full]==0.104.7`
+> `pip install -e kilosort==4.0.18`
 > `pip install "git+https://github.com/cortex-lab/phy.git@7a2494b"`
 > `pip install -e .`
-> If you encounter errors installing spikeinterface or Kilosort4, try navigating into each submodule folder and running `pip install -e .` to install the packages manually. Then `pip install -e .` in the main folder again to install the main EMUsort package.
 
 If the install finished successfully, proceed to the [Usage](https://github.com/snel-repo/EMUsort?tab=readme-ov-file#usage) section next.
 
@@ -158,8 +150,8 @@ Items #2-4, will be generated automatically inside the provided session folder.
    - Record Node ### (if using OpenEphys session folder)
 2. `emu_config.yaml` file
    - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command line option. Within the configuration file, please note that you will have to change the `dataset_type` attribute to match your desired dataset type. Once you generate the default config template, please review it and utilize the comments as documentation to guide your actions
-3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_P0_#_P1_#..._N#_SCORE#.###` folders, which are tagged with a datetime stamp, a channel group ID (`g#`, if used), session folder name, name value pairs of parameters used in a sweep in the same order as they appear in `emu_config.yaml` under `KS_params_to_sweep` (`..._P0_#...`, if used), the number of clusters identified (`...N#_...`), and a score for approximate estimation of the sorting performance (`_SCORE#.###`).
-   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']` and which channel was used as the reference for applying the delays under `ops['preprocessing']['reference_chan']`, which can be used as an index into `ops['preprocessing']['chan_delays']` or `emg_chans_used`). The corresponding channel indexes for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` is also dumped for future reference, which also includes channel indexes used in each sort as `emg_chans_used`.
+3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_P0_#_P1_#..._N#_SCORE#.###` folders, which are tagged with a datetime stamp, a channel group ID (`g#`, if used), session folder name, name value pairs of parameters used in a sweep in the same order as they appear in `emu_config.yaml` under `KS_params_to_sweep` (`..._P0_#...`, if used), the number of clusters identified (`...N#_...`), the number of good units above `cluster_score_threshold` (`...G#_...`), and a score for approximate estimation of the sorting performance (`_SCORE#.###`). From testing across many sorts, the number of good clusters scoring above 0.95 (indicated by the `G#` tag) correlates weakly with the true number of units scoring above 0.95 accuracy.
+   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']` and which channel was used as the reference for applying the delays under `ops['preprocessing']['reference_chan']`, which can be used as an index into `ops['preprocessing']['chan_delays']` or `emg_chans_used`). The corresponding channel IDs for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` text file is also saved for future reference, containing all parameters used, including channel delays under `emu_config["Results"]["emg_chan_delays"]` and channel IDs under `emu_config["Results"]["emg_chans_used"]`.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
 
@@ -167,11 +159,11 @@ Items #2-4, will be generated automatically inside the provided session folder.
 
 #### Intan, NWB, Blackrock, and Binary datasets:
 
-![Alt text](images/folder_tree_structure.png)
+![Alt text](https://raw.githubusercontent.com/snel-repo/EMUsort/refs/heads/main/images/folder_tree_structure.png)
 
 #### Open Ephys datasets:
 
-![Alt text](images/OE_folder_tree_structure.png)
+![Alt text](https://raw.githubusercontent.com/snel-repo/EMUsort/refs/heads/main/images/OE_folder_tree_structure.png)
 
 ### EMUsort Commands
 
@@ -268,9 +260,9 @@ By using `linked_params_for_sweep`, you get explicit control of some Kilosort pa
 
 > For example, the default configuration file specifies 5 settings each for `Th_universal`, `Th_learned`, and `Th_single_ch`. If no parameters were linked, the number of combinations would by 5\*5\*5=125, which is a very large number of combinations. So, instead, `Th_learned`, and `Th_single_ch` are linked by adding a sublist with the two keys: `linked_params_for_sweep: [[Th_universal, Th_learned]]`. In this case, because the linked parameters are treated as a single parameter in the combinatorics multiplication, the number of combinations will be 5*5=25.
 
-### Running EMUsort As If Default Kilosort4 (v4.0.11)
+### Running EMUsort As If Default Kilosort4 (v4.0.18)
 
-In order to run EMUsort exactly like a default Kilosort4 (v4.0.11) installation for comparison of performance, you can use the short-form command `emusort -kcsf .` to run it in the current folder, or use the below, longer-form command:
+To compare performance, you can also run EMUsort exactly like a default Kilosort4 installation (v4.0.18) by using the short-form command `emusort -kcsf .` to run it in the current folder, or use the longer-form command below:
 
     emusort --ks4 --config --sort --folder /path/to/session_folder
 
@@ -291,7 +283,6 @@ To run Kilosort4 emulation, reset `ks4_config.yaml` to default settings, edit th
 This emulation capability is useful for comparing the performance of EMUsort vs. Kilosort4.
 
 ## Final Notes
+If there are any discrepancies in the instructions/comments or any problems with the code, please submit an issue on GitHub so we can try to address the issue ASAP. If you'd like to request a specific feature or improvement to EMUsort, please let us know by submitting an issue on GitHub with the "enhancement" label with details about the feature request. 
 
-If there are any discrepancies in the instructions or any problems with the comments/code, please submit an issue on GitHub so we can try to address the issue ASAP.
-
-Thank you for trying out EMUsort! If you find it helpful, enjoy it, or love emus, give us a ⭐️ on GitHub!
+If you found this work helpful or just love emus, give us a ⭐️ on GitHub! Blessings and have a great week.
