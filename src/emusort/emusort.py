@@ -926,17 +926,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         )
         clusters_to_keep = np.nonzero(thresholded_cluster_scores)[0]
         curated_analyzer = analyzer.select_units(clusters_to_keep)
-        # if has_exceeding_spikes(curated_sorting, this_job["recording"]):
-        #     curated_sorting = remove_excess_spikes(curated_sorting)
-        #     print("Removing excess spikes from clusters filtered by score")
 
-        # analyzer_proc = si.create_sorting_analyzer(
-        #     curated_sorting,
-        #     this_job["recording"],
-        #     mode="memory",
-        #     sparse=False,
-        #     return_in_uV=return_in_uV,
-        # )
         await asyncio.to_thread(
             curated_analyzer.compute,
             {
@@ -947,49 +937,18 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
             },
         )
 
-        # this also done because some metrics need it
-        # try:
-
-        # emg_chan_noise_levels = analyzer_proc.compute("noise_levels", {"return_in_uV": True, "method": "mad"})
-        # except ValueError # usually happens with binary dataset type
-        # noise_params = dict(return_in_uV=False, method="mad")
-        # analyzer_proc.compute("noise_levels", **noise_params
-
-        # update the subsampled scores and report
-        # snr_scores = snr_scores[clusters_to_keep]
-        # firing_rate_validity_scores = firing_rate_validity_scores[clusters_to_keep]
-        # type_I_scores = type_I_scores[clusters_to_keep]
-        # type_II_scores = type_II_scores[clusters_to_keep]
-        # emusort_scores = emusort_scores[clusters_to_keep]
-        # emusort_score = np.nanmean(emusort_scores)
-        # report = (
-        #     "------------------------------------------------------------\n"
-        #     f" Worker {wid} Quality Scores Report (Processed):\n"
-        #     f" SNR scores:\n{snr_scores}\n"
-        #     f" Firing rate validity:\n{firing_rate_validity_scores}\n"
-        #     f" Type I error scores:\n{type_I_scores}\n"
-        #     f" Type II error scores:\n{type_II_scores}\n"
-        #     f" EMUsort scores:\n{emusort_scores}\n"
-        #     "------------------------------------------------------------\n"
-        #     f" Worker {wid} Overall EMUsort score: {emusort_score:.3f}\n"
-        #     "------------------------------------------------------------\n"
-        # )
-        # spike_counts = spike_counts[clusters_to_keep]
-
-    # get channel noise levels
-    # try:
-    #     emg_chan_noise_levels = si.get_noise_levels(
-    #         analyzer.recording, return_scaled=True, method="mad"
-    #     )
-    # # handle the error for recording types without scaling information (such as binary recordings)
-    # except ValueError:
-    #     emg_chan_noise_levels = si.get_noise_levels(
-    #         analyzer.recording, return_scaled=False, method="mad"
-    #     )
     noise_levels_ext = analyzer.get_extension(extension_name="noise_levels")
-    this_config["emg_chan_noise"] = noise_levels_ext.get_data().tolist()
-    # add Results section to this_config
-    this_config["Results"] = {}
+    this_config["Results"]["emg_chan_noise"] = noise_levels_ext.get_data().tolist()
+
+    ## add Results section to this_config
+
+    # load and set only single variable from ops.npy file
+    sorter_output_folder = sorted_folder / "sorter_output"
+    this_config["Results"]["emg_chan_delays"] = (
+        np.load(sorter_output_folder / "ops.npy", allow_pickle=True)
+        .item()["preprocessing"]["chan_delays"]
+        .tolist()
+    )
     this_config["Results"]["type_I_scores"] = type_I_scores
     this_config["Results"]["type_II_scores"] = type_II_scores
     this_config["Results"]["firing_rate_validity_scores"] = firing_rate_validity_scores
@@ -1001,7 +960,6 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         this_config["Results"]["emusort_scores"]
     )
 
-    sorter_output_folder = sorted_folder / "sorter_output"
     movetree(sorter_output_folder, sorted_folder)
     shutil.rmtree(sorter_output_folder, ignore_errors=True)
 
@@ -1017,6 +975,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
             # if only "keep_good_only", then non-"good" units were already
             # removed for analyzer in spikeinterface/extractors/phykilosortextractors.py
             curated_analyzer = analyzer
+
         await asyncio.to_thread(
             export_to_phy,
             curated_analyzer,
@@ -1029,8 +988,12 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         # movetree(phy_output_folder, sorted_folder)
         # shutil.rmtree(phy_output_folder, ignore_errors=True)
         processed = True
+        # store the number of clusters
+        this_config["Results"]["num_good_clusters"] = len(curated_analyzer.unit_ids)
     else:
         processed = False
+        # set None to indicate it was not evaluated, but to still output the field
+        this_config["Results"]["num_good_clusters"] = None
 
     await asyncio.to_thread(
         write_rec_and_params,
@@ -1075,7 +1038,13 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     name = "".join(char for char in name if char not in " ()[]").rstrip(",_")
 
     # append score and optional tag
-    name = f"{name}_N{str(this_config['Results']['num_clusters'])}_SCORE_{emusort_score:.3f}"
+    if (
+        this_config["KS"]["keep_good_only"]
+        or this_config["SI"]["cluster_score_threshold"]
+    ):
+        name = f"{name}_N{str(this_config['Results']['num_clusters'])}_G{this_config['Results']['num_good_clusters']}_SCORE_{emusort_score:.3f}"
+    else:
+        name = f"{name}_N{str(this_config['Results']['num_clusters'])}_SCORE_{emusort_score:.3f}"
     if this_config["sort_type"] == "ks4":
         name += "_KS4"
 
@@ -1084,7 +1053,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     # move and save
     shutil.move(sorted_folder, final_path)
     dump_yaml(final_path / f"{this_config['sort_type']}_config.yaml", this_config)
-    np.save(final_path / "emg_chans_used.npy", this_config["emg_chans_used"])
+    np.save(final_path / "emg_chans_used.npy", this_config["Results"]["emg_chans_used"])
 
     if (
         this_config["KS"]["keep_good_only"]
@@ -1388,9 +1357,7 @@ def main():
             full_config["Sorting"]["output_folder"].mkdir(parents=True, exist_ok=True)
 
         # loop through each group of EMG channels to sort independently
-        for iChanGroup, emg_chan_list in enumerate(
-            full_config["Group"]["emg_chan_list"]
-        ):
+        for iChanGroup in range(len(full_config["Group"]["emg_chan_list"])):
             preproc_recording = preprocess_ephys_data(
                 recording, full_config, iChanGroup
             )
@@ -1541,6 +1508,10 @@ def main():
                     shutil.rmtree(tmp_sorted_folder, ignore_errors=True)
                 # Path(tmp_sorted_folder).mkdir(parents=True, exist_ok=True)
                 recording_list.append(preproc_recording)
+                full_config["Results"] = {}
+                full_config["Results"]["emg_chans_used"] = (
+                    preproc_recording.get_channel_ids().tolist()
+                )
                 # create a new config file for each parallel job
                 this_config = deepcopy(full_config)
                 this_config["Sorting"]["sorted_folder"] = tmp_sorted_folder
@@ -1579,9 +1550,6 @@ def main():
                     print(
                         "Using CPU for Kilosort. Runtimes will be MUCH slower. If trying CUDA, make sure GPU(s) can be detected."
                     )
-                this_config["emg_chans_used"] = (
-                    preproc_recording.get_channel_ids().tolist()
-                )
 
                 these_configs.append(this_config)
 
