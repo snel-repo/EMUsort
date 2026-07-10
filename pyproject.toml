@@ -48,7 +48,7 @@ full = [
     "qtpy >= 2",
     "pyqtwebengine==5.15.7",
     "pyqtwebengine-qt5==5.15.2",
-    "phy@git+https://github.com/cortex-lab/phy@0eb09d1",
+    "phy",
 
 ]
 # use "core" for a minimal install of emusort dependencies without pytorch
@@ -86,7 +86,7 @@ phy = [
     "qtpy >= 2",
     "pyqtwebengine==5.15.7",
     "pyqtwebengine-qt5==5.15.2",
-    "phy@git+https://github.com/cortex-lab/phy@0eb09d1", # latest working version
+    "phy",
 
 ]
 
@@ -142,6 +142,9 @@ constraint-dependencies = [
 ]
 
 [tool.uv.sources]
+phy = [
+    {git = "https://github.com/cortex-lab/phy.git", rev = "0eb09d1"} # latest tested working Phy GUI
+]
 # Specify CPU/CUDA version for download. Also enable "full" flag to get CUDA
 torch = [
     { index = "pytorch-cpu", extra = "cpu" },
