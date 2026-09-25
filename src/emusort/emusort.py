@@ -198,10 +198,6 @@ def load_ephys_data(
 
     # blackrock dataset
     elif dataset_type == "blackrock":
-        print("Running Blackrock Read Code...")
-
-        # debug = sorted(Path(session_folder).iterdir())
-
         # Get list of Blackrock .nsX files
         nsx_files = [
             nsx_file
@@ -623,6 +619,7 @@ def get_emusort_scores(analyzer, score_terms, wid):
     def get_snr_scores(analyzer, snr_term):
         ## Check for SNRs that are high enough to be robustly detectable (i.e. scores high when >4 SNR)
         subterms = []
+        snrs_array = None
         if snr_term[0]:
             # gets ratio of largest peak to snippet standard deviation
             snrs = compute_snrs(
@@ -631,7 +628,7 @@ def get_emusort_scores(analyzer, score_terms, wid):
             )
             snrs_array = np.fromiter(snrs.values(), float)
             # set sigmoid so that the score is 0.5 at 4
-            sigmoidal_snr_scores = 1 - (1 / (1 + np.exp((snrs_array - 4))))
+            sigmoidal_snr_scores = 1 - (1 / (1 + np.exp(snrs_array - 4)))
             subterms.append(sigmoidal_snr_scores)
         else:
             snrs = None
@@ -669,20 +666,21 @@ def get_emusort_scores(analyzer, score_terms, wid):
     spike_counts = get_spike_counts(analyzer)
 
     # get quality metric report string for this worker
-    report = (
-        "------------------------------------------------------------\n"
-        f" Worker {wid} Quality Scores Report:\n"
-        f" Type I error scores:\n{'disabled' if type(type_I_scores) is int else type_I_scores.round(6)}\n"
-        f" Type II error scores:\n{'disabled' if type(type_II_scores) is int else type_II_scores.round(6)}\n"
-        f" Firing rate validity:\n{'disabled' if type(fr_validity_scores) is int else fr_validity_scores.round(6)}\n"
-        f" SNR scores:\n{'disabled' if type(snr_scores) is int else snr_scores.round(6)}\n"
-        f" EMUsort scores:\n{emusort_scores.round(6)}\n"
-        f" SNRs:\n {'disabled' if snrs is None else snrs.round(6)}\n"
-        f" Spike counts:\n{spike_counts}\n"
-        "------------------------------------------------------------\n"
-        f" Worker {wid} Overall EMUsort score: {emusort_score:.3f}\n"
-        "------------------------------------------------------------\n"
-    )
+    with np.printoptions(precision=6, suppress=True):
+        report = (
+            "------------------------------------------------------------\n"
+            f" Worker {wid} Quality Scores Report:\n"
+            f" Type I error scores:\n{'disabled' if type(type_I_scores) is int else type_I_scores}\n"
+            f" Type II error scores:\n{'disabled' if type(type_II_scores) is int else type_II_scores}\n"
+            f" Firing rate validity:\n{'disabled' if type(fr_validity_scores) is int else fr_validity_scores}\n"
+            f" SNR scores:\n{'disabled' if type(snr_scores) is int else snr_scores}\n"
+            f" EMUsort scores:\n{emusort_scores}\n"
+            f" SNRs:\n {'disabled' if snrs is None else snrs}\n"
+            f" Spike counts:\n{spike_counts}\n"
+            "------------------------------------------------------------\n"
+            f" Worker {wid} Overall EMUsort score: {emusort_score:.3f}\n"
+            "------------------------------------------------------------\n"
+        )
 
     return (
         "disabled" if type(type_I_scores) is int else type_I_scores.tolist(),
@@ -741,7 +739,6 @@ def write_rec_and_params(
             writer = csv.DictWriter(f, fieldnames=score_tsv_fields, delimiter="\t")
             writer.writeheader()
             writer.writerows(score_tsv_data)
-        return
 
     # save dat file
     if dtype is None:
@@ -781,9 +778,8 @@ def write_rec_and_params(
     # write EMUsort score tsv for use with Phy
     write_score_tsv(analyzer, this_config, sorted_folder)
 
-    if (
-        this_config["KS"]["keep_good_only"]
-        or this_config["SI"]["cluster_score_threshold"]
+    if this_config["KS"]["keep_good_only"] or (
+        this_config["SI"]["cluster_score_threshold"] and processed
     ):
         write_score_tsv(
             analyzer, this_config, sorted_folder / "processed_output", processed
@@ -919,23 +915,29 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         spike_counts,
         report,
     ) = get_emusort_scores(analyzer, this_config["Sorting"]["score_terms"], wid)
-
+    clusters_to_keep = None
     if this_config["SI"]["cluster_score_threshold"] > 0:
         thresholded_cluster_scores = (
             emusort_scores > this_config["SI"]["cluster_score_threshold"]
         )
         clusters_to_keep = np.nonzero(thresholded_cluster_scores)[0]
-        curated_analyzer = analyzer.select_units(clusters_to_keep)
+        if not clusters_to_keep:
+            print(
+                "No units scored above cluster_score_threshold: disabling processed output based on EMUsort score. "
+                "If you need this, try lowering cluster_score_threshold or changing other parameters in emu_config.yaml to try to improve scores."
+            )
+        else:
+            curated_analyzer = analyzer.select_units(clusters_to_keep)
 
-        await asyncio.to_thread(
-            curated_analyzer.compute,
-            {
-                "random_spikes": {"method": "all"},
-                "waveforms": {"ms_before": ms_buffer, "ms_after": ms_buffer},
-                "templates": {"operators": ["average", "std", "median"]},
-                "spike_amplitudes": {"peak_sign": "both"},
-            },
-        )
+            await asyncio.to_thread(
+                curated_analyzer.compute,
+                {
+                    "random_spikes": {"method": "all"},
+                    "waveforms": {"ms_before": ms_buffer, "ms_after": ms_buffer},
+                    "templates": {"operators": ["average", "std", "median"]},
+                    "spike_amplitudes": {"peak_sign": "both"},
+                },
+            )
 
     noise_levels_ext = analyzer.get_extension(extension_name="noise_levels")
     this_config["Results"]["emg_chan_noise"] = noise_levels_ext.get_data().tolist()
@@ -966,15 +968,18 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     # Export to Phy format asynchronously
     print(f"Worker {wid} exporting to Phy format...")
     # adding this to get the SI-processed Phy output which can remove non-"good" clusters
-    if (
-        this_config["KS"]["keep_good_only"]
-        or this_config["SI"]["cluster_score_threshold"]
+    if this_config["KS"]["keep_good_only"] or (
+        this_config["SI"]["cluster_score_threshold"] and clusters_to_keep
     ):
         phy_proc_output_folder = sorted_folder / "processed_output"
-        if not this_config["SI"]["cluster_score_threshold"]:
-            # if only "keep_good_only", then non-"good" units were already
-            # removed for analyzer in spikeinterface/extractors/phykilosortextractors.py
-            curated_analyzer = analyzer
+        # if (
+        #     # if processed output is disabled
+        #     not this_config["SI"]["cluster_score_threshold"]
+        #     or not clusters_to_keep
+        # ):
+        #     # if only "keep_good_only", then non-"good" units were already removed
+        #     # for analyzer in spikeinterface/extractors/phykilosortextractors.py
+        #     curated_analyzer = analyzer
 
         await asyncio.to_thread(
             export_to_phy,
@@ -1042,7 +1047,12 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         this_config["KS"]["keep_good_only"]
         or this_config["SI"]["cluster_score_threshold"]
     ):
-        name = f"{name}_N{str(this_config['Results']['num_clusters'])}_G{this_config['Results']['num_good_clusters']}_SCORE_{emusort_score:.3f}"
+        num_G = (
+            0
+            if this_config["Results"]["num_good_clusters"] is None
+            else this_config["Results"]["num_good_clusters"]
+        )
+        name = f"{name}_N{str(this_config['Results']['num_clusters'])}_G{num_G}_SCORE_{emusort_score:.3f}"
     else:
         name = f"{name}_N{str(this_config['Results']['num_clusters'])}_SCORE_{emusort_score:.3f}"
     if this_config["sort_type"] == "ks4":
@@ -1055,9 +1065,8 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
     dump_yaml(final_path / f"{this_config['sort_type']}_config.yaml", this_config)
     np.save(final_path / "emg_chans_used.npy", this_config["Results"]["emg_chans_used"])
 
-    if (
-        this_config["KS"]["keep_good_only"]
-        or this_config["SI"]["cluster_score_threshold"]
+    if this_config["KS"]["keep_good_only"] or (
+        this_config["SI"]["cluster_score_threshold"] and clusters_to_keep
     ):
         final_path = final_path / "processed_output"
     phy_msg = f"\nTo view Worker {wid} result in Phy, run:\nphy template-gui {(final_path / 'params.py').as_posix()}\n"
@@ -1099,7 +1108,7 @@ async def extract_concurrently(
             # )
         except Exception as e:
             raise Exception(
-                f"Error in parallel extraction of batch {i // max_concurrent_tasks + 1}/{np.ceil(len(tasks) / max_concurrent_tasks).astype(int)}, try reducing max_concurrent_tasks in 'SI' section of emu_config.yaml next time. ..."
+                f"Error in parallel extraction of batch {i // max_concurrent_tasks + 1}/{np.ceil(len(tasks) / max_concurrent_tasks).astype(int)}: {e}"
             ) from e
         print(
             "------------------------------------------------------------\n"
