@@ -50,22 +50,22 @@ np.random.seed(316)
 
 
 def create_config(
-    repo_folder: Union[Path, str], session_folder: Union[Path, str], ks4: bool = False
+    source_folder: Union[Path, str], session_folder: Union[Path, str], ks4: bool = False
 ):
     """
     Copies a configuration template file from the repository folder to the session folder.
 
-    This function ensures that both `repo_folder` and `session_folder` are Path objects.
-    It then copies the "config_template_emu.yaml" or "config_template_ks4.yaml" file from the `repo_folder` to the `session_folder`
+    This function ensures that both `source_folder` and `session_folder` are Path objects.
+    It then copies the "config_template_emu.yaml" or "config_template_ks4.yaml" file from the `source_folder` to the `session_folder`
     and renames it to "emu_config.yaml".
 
     Parameters:
-    - repo_folder: Union[Path, str] - The path to the repository folder containing the configuration template.
+    - source_folder: Union[Path, str] - The path to the repository folder containing the configuration template.
     - session_folder: Union[Path, str] - The path to the session folder where the configuration file should be copied.
     """
     try:
         # Ensure both are Path objects
-        repo_folder = Path(repo_folder)
+        source_folder = Path(source_folder)
         session_folder = Path(session_folder)
     except TypeError as e:
         raise TypeError("Please provide valid folder paths.") from e
@@ -76,7 +76,7 @@ def create_config(
         sort_type_str = "emu"
 
     shutil.copyfile(
-        repo_folder / "configs" / f"config_template_{sort_type_str}.yaml",
+        source_folder / "configs" / f"config_template_{sort_type_str}.yaml",
         session_folder / f"{sort_type_str}_config.yaml",
     )
 
@@ -1293,8 +1293,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Set repo folder path
-    repo_folder_path = Path(__file__).parent.parent.parent
+    # Set location of source path
+    emusort_source_path = Path(__file__).parent
 
     # Generate, reset, or load config file
     if args.ks4:
@@ -1309,7 +1309,7 @@ def main():
     if not config_file_path.exists() or args.reset_config:
         print(f"Generating config file from default template: \n{config_file_path}\n")
         create_config(
-            repo_folder_path,
+            emusort_source_path,
             Path(args.folder).expanduser().resolve(),
             ks4=args.ks4,
         )
@@ -1326,7 +1326,7 @@ def main():
     # Prepare common configuration file, accounting for section titles, Data, Sorting, and Group
     full_config["Data"].update(
         {
-            "repo_folder": repo_folder_path,
+            "installation_folder": emusort_source_path,
             "session_folder": Path(args.folder).expanduser().resolve(),
         }
     )

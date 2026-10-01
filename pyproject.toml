@@ -38,8 +38,8 @@ full = [
     "matplotlib",
     "pandas",
     "ruamel.yaml",
-    "torch >= 2.4.0",
-    "torchaudio >= 2.4.0",
+    "torch >= 2.4.0, <2.8.0",
+    "torchaudio >= 2.4.0, <2.8.0",
     "pyqtgraph >= 0.13.0",
     "pyqt5 == 5.15.11",
     "pyqt5-qt5 == 5.15.2",
@@ -67,13 +67,13 @@ core = [
 ]
 # if using the "core" extra, install the cpu version of pytorch
 cpu = [
-    "torch >= 2.4.0",
-    "torchaudio >= 2.4.0",
+    "torch >= 2.4.0, <2.8.0",
+    "torchaudio >= 2.4.0, <2.8.0",
 ]
 # if using the "core" extra, install the gpu version of pytorch
 cu118 = [
-    "torch >= 2.4.0",
-    "torchaudio >= 2.4.0",
+    "torch >= 2.4.0, <2.8.0",
+    "torchaudio >= 2.4.0, <2.8.0",
 ]
 # if using the "core" extra, install Phy for visualization
 # the equivalent command to "uv sync --extra full" is "uv sync --extra core --extra cu118 --extra phy"
@@ -127,8 +127,8 @@ constraint-dependencies = [
     "scikit-learn >= 1.3",
     "setuptools >= 42, <81",
     "spikeinterface[full] == 0.104.7",
-    "torch >= 2.4.0",
-    "torchaudio >= 2.4.0",
+    "torch >= 2.4.0, <2.8.0",
+    "torchaudio >= 2.4.0, <2.8.0",
     "pyqtgraph >= 0.13.0",
     "pyqt5 == 5.15.11",
     "pyqt5-qt5 == 5.15.2",

@@ -1,5 +1,5 @@
 ---
-## EMUsort configuration file to emulate Kilosort4 settings
+## EMUsort configuration file
 
 # Dataset Parameters
 # provide information specific to the dataset you want to sort
@@ -34,11 +34,11 @@ Sorting:
         Th_universal: [9,10,7,5,2] # list of floats
         Th_learned: [8,4,3,2,1] # list of floats
         Th_single_ch: # list of lists of floats in units of STDs, EMUsort allows aggregation of multiple thresholds, Kilosort4 only uses single thresholds
+            - [6, 9, 12, 15]
+            - [6, 9, 12]
+            - [3, 6, 9]
+            - [6, 9]
             - [6]
-            - [3]
-            - [9]
-            - [12]
-            - [15]
     linked_params_for_sweep: # list of lists of strings (parameter keys from KS section)
         # some parameters should be linked to avoid bad combinations and reduce overall run count
         # for linked parameters, only matching indexes will be taken as a valid combination
@@ -71,19 +71,19 @@ Group:
 # Kilosort parameters
 # nearest_chans and torch_device may be modified in emusort.py to avoid errors
 KS:
-    remove_chan_delays: false # EMUsort setting, will apply channel delays to align MUAPs based on correlation maximization
-    remove_spike_outliers: false # EMUsort setting, will use HDBSCAN to remove outlier isolated spikes during initialization
+    remove_chan_delays: true # EMUsort setting, will apply channel delays to align MUAPs based on correlation maximization
+    remove_spike_outliers: true # EMUsort setting, will use HDBSCAN to remove outlier isolated spikes during initialization
     hdbscan_min_cluster_size: 20 # EMUsort setting, controls the minimum number of points needed to count as a cluster during HDBSCAN spike outlier removal. See sklearn HDBSCAN docs regarding the min_cluster_size parameter for more info.
     batch_size: 60000
     nblocks: 0
-    Th_single_ch: [6]
+    Th_single_ch: [6, 9, 12, 15]
     Th_universal: 9
     Th_learned: 8
     do_CAR: false
     invert_sign: false
     nt: 61
     artifact_threshold:
-    nskip: 25
+    nskip: 2
     whitening_range: 32
     binning_depth: 5
     sig_interp: 20
@@ -95,8 +95,8 @@ KS:
     nearest_chans: 10
     nearest_templates: 100
     templates_from_data: true
-    n_templates: 6
-    n_pcs: 6
+    n_templates: 9
+    n_pcs: 9
     acg_threshold: 0.2
     ccg_threshold: 0.25
     cluster_downsampling: 20
@@ -112,4 +112,4 @@ SI:
     n_jobs: 1 # Number of parallel jobs for spikeinterface functions. Can speed up single runs, ignored if do_KS_param_sweep is True to avoid hanging issues.
     chunk_duration: '20s' # Chunk duration in seconds if float or with units if str (e.g. '20s', '500ms')
     max_concurrent_tasks: 5 # Batch size to perform asynchronous disk reads/writes. Higher is generally faster, with the limit at the number of parameter sweep combinations, but lower can be more stable.
-    cluster_score_threshold: 0.95 # Minimum emusort score required to save a cluster in output_folder/processed_output (0.95 recommended, set 0 to disable)
+    cluster_score_threshold: 0 # Minimum emusort score required to save a cluster in output_folder/processed_output (0.95 recommended, set 0 to disable)
