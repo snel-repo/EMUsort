@@ -31,7 +31,6 @@ from probeinterface import Probe
 from ruamel.yaml import YAML
 from sklearn.model_selection import ParameterGrid
 from spikeinterface.core import read_binary, write_binary_recording
-from spikeinterface.core.waveform_tools import has_exceeding_spikes
 from spikeinterface.curation import remove_excess_spikes
 from spikeinterface.exporters import export_to_phy
 from spikeinterface.metrics import (
@@ -44,6 +43,7 @@ from spikeinterface.metrics import (
 )
 from torch.cuda import is_available
 
+from . import __version__
 from .ks4mods.si_sorter_class import KS4EMUsortSorter
 
 np.random.seed(316)
@@ -1290,6 +1290,7 @@ def main():
         action="store_true",
         help="Run EMUsort emulating Kilosort4 by using the ks4_config.yaml configuration file",
     )
+    parser.add_argument("-v, --version", action="version", version=__version__)
 
     args = parser.parse_args()
 
