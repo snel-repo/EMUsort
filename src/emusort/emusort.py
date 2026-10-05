@@ -639,11 +639,8 @@ def get_emusort_scores(analyzer, score_terms, wid):
     def get_spike_counts(analyzer):
         spike_counts = np.zeros_like(analyzer.unit_ids)
         wv = analyzer.get_extension(extension_name="waveforms")
-
-        for iClust in analyzer.unit_ids:
-            # spike_counts[iClust] = wv_data[iClust].shape[0]
-            spike_counts[iClust] = wv.get_waveforms_one_unit(iClust).shape[0]
-            # spike_counts[iClust] = analyzer.get_waveforms(iClust).shape[0]
+        for ii, iClust in enumerate(analyzer.unit_ids):
+            spike_counts[ii] = wv.get_waveforms_one_unit(iClust).shape[0]
         return spike_counts
 
     # get quality metric scores
@@ -926,7 +923,7 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
             if not this_config["KS"]["keep_good_only"]:
                 print("No processed_output folder will be generated.")
         else:
-            curated_analyzer = analyzer.select_units(clusters_to_keep)
+            curated_analyzer = analyzer.select_units(analyzer.unit_ids[clusters_to_keep])
 
             await asyncio.to_thread(
                 curated_analyzer.compute,
