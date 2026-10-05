@@ -375,7 +375,7 @@ def setup_logger(results_dir):
 
     # set up logging to file for root logger
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.ERROR,  # only log errors during runtime for non-KS4 programs
         format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
         datefmt="%m-%d %H:%M",
         filename=results_dir / "kilosort4.log",
