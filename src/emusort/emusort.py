@@ -920,12 +920,11 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         thresholded_cluster_scores = (
             emusort_scores > this_config["SI"]["cluster_score_threshold"]
         )
-        clusters_to_keep = np.nonzero(thresholded_cluster_scores)[0]
+        clusters_to_keep = np.nonzero(thresholded_cluster_scores)[0].tolist()
         if not clusters_to_keep:
-            print(
-                "No units scored above cluster_score_threshold: disabling processed output based on EMUsort score. "
-                "If you need this, try lowering cluster_score_threshold or changing other parameters in emu_config.yaml to try to improve scores."
-            )
+            print("No units scored above cluster_score_threshold.")
+            if not this_config["KS"]["keep_good_only"]:
+                print("No processed_output folder will be generated.")
         else:
             curated_analyzer = analyzer.select_units(clusters_to_keep)
 
@@ -972,14 +971,13 @@ async def extract_sorting_result(this_sorting, this_config, this_job, wid):
         this_config["SI"]["cluster_score_threshold"] and clusters_to_keep
     ):
         phy_proc_output_folder = sorted_folder / "processed_output"
-        # if (
-        #     # if processed output is disabled
-        #     not this_config["SI"]["cluster_score_threshold"]
-        #     or not clusters_to_keep
-        # ):
-        #     # if only "keep_good_only", then non-"good" units were already removed
-        #     # for analyzer in spikeinterface/extractors/phykilosortextractors.py
-        #     curated_analyzer = analyzer
+        if (
+            # need to define curated analyzer when only keep_good_only
+            not this_config["SI"]["cluster_score_threshold"] or not clusters_to_keep
+        ):
+            # if only "keep_good_only", then non-"good" units were already removed
+            # for analyzer in spikeinterface/extractors/phykilosortextractors.py
+            curated_analyzer = analyzer
 
         await asyncio.to_thread(
             export_to_phy,
