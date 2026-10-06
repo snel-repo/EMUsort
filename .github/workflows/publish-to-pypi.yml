@@ -59,24 +59,24 @@ jobs:
       with:
         repository-url: https://test.pypi.org/legacy/
 
-  # publish-to-pypi:
-  #   name: Publish Python distribution to PyPI
-  #   needs:
-  #   - build
-  #   runs-on: ubuntu-latest
+  publish-to-pypi:
+    name: Publish Python distribution to PyPI
+    needs:
+    - build
+    runs-on: ubuntu-latest
     
-  #   environment:
-  #     name: pypi
-  #     url: https://pypi.org/p/emusort  # Replace <package-name> with your PyPI project name
+    environment:
+      name: pypi
+      url: https://pypi.org/p/emusort  # Replace <package-name> with your PyPI project name
 
-  #   permissions:
-  #     id-token: write  # IMPORTANT: mandatory for trusted publishing
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
 
-  #   steps:
-  #   - name: Download all the dists
-  #     uses: actions/download-artifact@v6
-  #     with:
-  #       name: python-package-distributions-ubuntu-latest-py3.10
-  #       path: dist/
-  #   - name: Publish distribution to PyPI
-  #     uses: pypa/gh-action-pypi-publish@release/v1
+    steps:
+    - name: Download all the dists
+      uses: actions/download-artifact@v6
+      with:
+        name: python-package-distributions-ubuntu-latest-py3.10
+        path: dist/
+    - name: Publish distribution to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
