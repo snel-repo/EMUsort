@@ -1285,7 +1285,7 @@ def main():
         action="store_true",
         help="Run EMUsort emulating Kilosort4 by using the ks4_config.yaml configuration file",
     )
-    parser.add_argument("-v, --version", action="version", version=__version__)
+    parser.add_argument("-v, --version", action="version", version=__version__, help="Show the current version number and exit.")
 
     args = parser.parse_args()
 

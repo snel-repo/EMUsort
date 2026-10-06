@@ -25,15 +25,21 @@
 - Python (Automatically installed with the environment)
   - \>=3.10
 
+### Installation Options
+There are two main options for installation of EMUsort (detailed in the below sections). At a high level, you can either:
+
+1. Clone from Github and install from those files, or
+2. Install from PyPI with `pip`
+
+In both cases, it is recommended to create a Python environment where the packages can be installed and controlled more effectively. This can be handled with `venv` or a package manager like `micromamba`. Choose a method you feel comfortable with to create a new environment and install EMUsort with one of the below methods.
+
 ### Cloning from GitHub
-
-Clone the repository recursively onto your machine (for example, in the home directory)
-
+Navigate into the folder where you want to clone the GitHub files for EMUsort, then run:
     git clone https://github.com/snel-repo/EMUsort.git
 
-After cloning is complete, you will need to configure a uv, micromamba, or conda environment.
+After cloning is complete, you will need to configure an environment with `uv`, `venv`, `micromamba`, or `conda`.
 
-### Pulling Updates from GitHub
+#### Pulling Updates from GitHub
 
 To update your `EMUsort` clone to the latest version, you can pull updates from the main repository. To do so, navigate into the folder where `EMUsort` was cloned and run:
 
@@ -48,7 +54,7 @@ If you are updating a previous EMUsort installation, you may encounter issues wi
 
     emusort --reset-config --folder /path/to/session_folder
 
-### Python Environment Creation
+#### Python Environment Creation
 
 Before following the below steps, make sure to navigate into the folder where `EMUsort` was cloned.
 
@@ -109,6 +115,15 @@ Make sure restart the terminal or [initialize](https://www.anaconda.com/docs/get
     cd /path/to/repo_folder # go into the EMUsort clone location
     conda env create -f environment.yml
 
+### Installing from PyPI with `pip`
+With this method you must create and activate a new Python environment first. If you don't know how to do that, consulting the `micromamba` instructions in [Python Environment Creation](https://github.com/snel-repo/EMUsort#option-2-micromamba) above may be helpful (or read up on using [`venv`](https://docs.python.org/3/library/venv.html#creating-virtual-environments)). With the method of your choice, create and activate an environment, then run the below command:
+    
+    pip install emusort[full]
+
+This is usually enough, but sometimes the wrong version of CUDA files can be installed along with PyTorch that are not compatible with your GPU (not controllable in `pyproject.toml` due to how PyTorch CUDA versions are controlled with index URLs). If you run into issues using EMUsort, such as GPU not being detected, you can usually fix the issue by force reinstalling with CUDA 11.8 (recommended for use with Kilosort4), using the below command:
+
+    pip install "torch>=2.4,<2.8" "torchaudio>=2.4,<2.8" --index-url https://download.pytorch.org/whl/cu118 --force-reinstall
+
 ## Usage
 
 ### Python Environment Activation
@@ -150,8 +165,9 @@ Items #2-4, will be generated automatically inside the provided session folder.
    - Record Node ### (if using OpenEphys session folder)
 2. `emu_config.yaml` file
    - will be automatically generated and should be updated to make operational changes to EMUsort using the `--config` (or `-c`) command line option. Within the configuration file, please note that you will have to change the `dataset_type` attribute to match your desired dataset type. Once you generate the default config template, please review it and utilize the comments as documentation to guide your actions
-3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_P0_#_P1_#..._N#_SCORE#.###` folders, which are tagged with a datetime stamp, a channel group ID (`g#`, if used), session folder name, name value pairs of parameters used in a sweep in the same order as they appear in `emu_config.yaml` under `KS_params_to_sweep` (`..._P0_#...`, if used), the number of clusters identified (`...N#_...`), the number of good units above `cluster_score_threshold` (`...G#_...`), and a score for approximate estimation of the sorting performance (`_SCORE#.###`). From testing across many sorts, the number of good clusters scoring above 0.95 (indicated by the `G#` tag) correlates weakly with the true number of units scoring above 0.95 accuracy.
-   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the phy output files, and a copy of the parameters used to sort the data (`ops.npy` includes channel delays under `ops['preprocessing']['chan_delays']` and which channel was used as the reference for applying the delays under `ops['preprocessing']['reference_chan']`, which can be used as an index into `ops['preprocessing']['chan_delays']` or `emg_chans_used`). The corresponding channel IDs for each sort are saved as `emg_chans_used.npy`. In each new sort folder, the `emu_config.yaml` text file is also saved for future reference, containing all parameters used, including channel delays under `emu_config["Results"]["emg_chan_delays"]` and channel IDs under `emu_config["Results"]["emg_chans_used"]`.
+3. `sorted_yyyyMMdd_HHmmssffffff_g#_<session_folder>_P0_#_P1_#..._N#_SCORE#.###` folders, which are tagged with a datetime stamp, a channel group ID (`g#`, if used), session folder name, name value pairs of parameters used in a sweep in the same order as they appear in `emu_config.yaml` under `KS_params_to_sweep` (`..._P0_#...`, if used), the number of clusters identified (`...N#_...`), the number of good units above `cluster_score_threshold` (`...G#_...`), and an average score for approximate estimation of the sorting performance (`_SCORE#.###`). From testing across many sorts, the number of good clusters scoring above 0.95 (indicated by the `G#` tag) tends to be a better estimator of the best sort overall. That is, the count of good scoring units (>0.95) is the best predictor of the count of truly good scoring units (>0.95 accuracy).
+   - Each time a sort is performed, a new folder will be created in the session folder with the date and time of the sort. Inside this sorted folder will be the sorted data, the Phy output files, and a copy `emu_config.yaml` file that was used, for future reference. This important output file contains all parameters that were used for that sort and additional data related to how the sort performed under `emu_config["Results"]`. This `Results` subsection includes channel IDs under `emu_config["Results"]["emg_chans_used"]`, channel delays under `emu_config["Results"]["emg_chan_delays"]`, and the scores and spike counts for each output cluster. These individual scores will also appear inside Phy GUI under a `score` column because of the `cluster_scores.tsv` file. If Numpy format is preferred, the folder also contains an `ops.npy` output file from Kilosort4 with channel delays under `ops['preprocessing']['chan_delays']` and the reference channel for applying the delays under `ops['preprocessing']['reference_chan']`. The channel IDs (names) are also saved in `emg_chans_used.npy`.
+   - If the `cluster_score_threshold` feature was used (i.e., changed from 0 to the recommended value, 0.95), EMUsort will create a subfolder here called `processed_output` that will contain a filtered output of only the clusters scoring above the set threshold. Targeting this subfolder with Phy GUI allows viewing these filtered outputs seperately. Using this featyre also provides another metric of performance, where the count of units scoring above a set threshold (e.g., 0.95) can serve as a predictor of the best overall sort.
 4. `concatenated_data` folder
    - will be automatically created if the `emg_recordings` field has more than one entry, such as `[0,1,2,7]` or `[all]`, which automatically includes all recordings in the session folder
 
@@ -170,6 +186,10 @@ Items #2-4, will be generated automatically inside the provided session folder.
 To show a helpful summary of EMUsort commands:
 
     emusort --help
+
+To show the current version number:
+
+    emusort --version
 
 To simply generate a configuration file (if it doesn't exist), run the below command:  
 
@@ -197,6 +217,7 @@ If you want to specify multiple settings at the same time, you can append any co
 >**Note:** For all commands, there is a short-form equivalent. The flags can be used in any order, but the path must always follow directly after the `--folder` flag.
 
     --help, -h
+    --version, -v
     --folder /path/to/session_folder, -f ./session_folder
     --config, -c
     --reset-config, --r
