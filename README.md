@@ -117,7 +117,7 @@ Make sure restart the terminal or [initialize](https://www.anaconda.com/docs/get
     conda env create -f environment.yml
 
 ### Installing from PyPI with `pip`
-With this method you must create and activate a new Python environment first. If you don't know how to do that, consulting the `micromamba` instructions in [Python Environment Creation](https://github.com/snel-repo/EMUsort#option-2-micromamba) above may be helpful (or read up on using [`venv`](https://docs.python.org/3/library/venv.html#creating-virtual-environments)). With the method of your choice, create and activate an environment, then run the below command:
+With this method you must create and activate a new Python environment first. If you don't know how to do that, consulting the `micromamba` instructions in [Python Environment Creation](https://github.com/snel-repo/EMUsort#option-2-micromamba) above may be helpful (or read up on using [`venv`](https://docs.python.org/3/library/venv.html#creating-virtual-environments)). With the method of your choice, create and activate an environment (with Python 3.10), then run the below command:
     
     pip install emusort[full]
 
