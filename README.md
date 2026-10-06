@@ -35,6 +35,7 @@ In both cases, it is recommended to create a Python environment where the packag
 
 ### Cloning from GitHub
 Navigate into the folder where you want to clone the GitHub files for EMUsort, then run:
+    
     git clone https://github.com/snel-repo/EMUsort.git
 
 After cloning is complete, you will need to configure an environment with `uv`, `venv`, `micromamba`, or `conda`.
